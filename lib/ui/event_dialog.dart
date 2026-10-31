@@ -10,12 +10,16 @@ class EventDialog extends StatefulWidget {
     required this.initialTime,
     required this.showAmount,
     this.initialAmount,
+    this.warning,
   });
 
   final String title;
   final DateTime initialTime;
   final bool showAmount;
   final double? initialAmount;
+
+  /// Shown at the top of the dialog when set.
+  final String? warning;
 
   @override
   State<EventDialog> createState() => _EventDialogState();
@@ -70,6 +74,7 @@ class _EventDialogState extends State<EventDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.warning != null) DialogWarning(widget.warning!),
           TextButton.icon(
             onPressed: _pickTime,
             icon: const Icon(Icons.schedule),
@@ -97,6 +102,27 @@ class _EventDialogState extends State<EventDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+  }
+}
+
+/// A warning line for the top of a dialog.
+class DialogWarning extends StatelessWidget {
+  const DialogWarning(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.error;
+    return Row(
+      children: [
+        Icon(Icons.warning_amber, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text, style: TextStyle(color: color)),
+        ),
       ],
     );
   }

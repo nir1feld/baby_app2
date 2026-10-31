@@ -119,6 +119,49 @@ void main() {
   test('latestOfType is null when there are none of that type', () {
     expect(latestOfType([], EventType.feed), isNull);
   });
+
+  test('eventsOnDay splits days at local midnight', () async {
+    await log.add(EventType.feed, timestamp: DateTime(2026, 10, 30, 23, 59));
+    await log.add(EventType.feed, timestamp: DateTime(2026, 10, 31));
+    await log.add(EventType.feed, timestamp: DateTime(2026, 10, 31, 23, 59));
+    await log.add(EventType.feed, timestamp: DateTime(2026, 11, 1));
+
+    final onDay = eventsOnDay(
+      await log.currentEvents(),
+      DateTime(2026, 10, 31),
+    );
+
+    expect(onDay.map((event) => event.timestamp.toLocal()), [
+      DateTime(2026, 10, 31, 23, 59),
+      DateTime(2026, 10, 31),
+    ]);
+  });
+
+  test('daysWithEvents follows edits and ignores deleted events', () async {
+    await log.add(EventType.feed, timestamp: DateTime(2026, 10, 20, 9));
+    await log.add(EventType.diaper, timestamp: DateTime(2026, 10, 20, 23));
+    await log.add(EventType.sleep, timestamp: DateTime(2026, 10, 21, 9));
+    await log.add(EventType.feed, timestamp: DateTime(2026, 10, 22, 9));
+
+    final current = await log.currentEvents();
+    await log.delete(current.firstWhere((e) => e.type == EventType.sleep));
+    await log.edit(current.first, timestamp: DateTime(2026, 10, 23, 9));
+
+    expect(daysWithEvents(await log.currentEvents()), {
+      DateTime(2026, 10, 20),
+      DateTime(2026, 10, 23),
+    });
+  });
+
+  test('eventsOnDay handles times stored as UTC', () async {
+    final local = DateTime(2026, 10, 31, 23, 30);
+    await log.add(EventType.feed, timestamp: local.toUtc());
+
+    final events = await log.currentEvents();
+
+    expect(eventsOnDay(events, DateTime(2026, 10, 31)), hasLength(1));
+    expect(eventsOnDay(events, DateTime(2026, 11, 1)), isEmpty);
+  });
 }
 
 const _hour = Duration(hours: 1);

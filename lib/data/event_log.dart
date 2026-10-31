@@ -36,6 +36,26 @@ BabyEvent? latestOfType(List<BabyEvent> currentEvents, EventType type) {
   return null;
 }
 
+/// The events in [currentEvents] that happened on the same local day as [day].
+List<BabyEvent> eventsOnDay(List<BabyEvent> currentEvents, DateTime day) {
+  return currentEvents.where((event) {
+    final time = event.timestamp.toLocal();
+    return time.year == day.year &&
+        time.month == day.month &&
+        time.day == day.day;
+  }).toList();
+}
+
+/// The local days that have at least one event in [currentEvents].
+Set<DateTime> daysWithEvents(List<BabyEvent> currentEvents) {
+  return {for (final event in currentEvents) _localDay(event.timestamp)};
+}
+
+DateTime _localDay(DateTime time) {
+  final local = time.toLocal();
+  return DateTime(local.year, local.month, local.day);
+}
+
 /// Comparing IDs on a tie gives every phone the same order.
 int _byLoggedAt(BabyEvent a, BabyEvent b) {
   final byTime = a.loggedAt.compareTo(b.loggedAt);
@@ -61,6 +81,8 @@ class EventLog {
 
   /// Who is recorded as logging events from this phone.
   final String loggedBy;
+
+  DateTime now() => _clock();
 
   Future<List<BabyEvent>> currentEvents() async {
     return deriveCurrentEvents(await _repository.allEvents());
