@@ -1,15 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/baby_event.dart';
 import '../data/event_log.dart';
+import '../data/sync/sync_controller.dart';
 import 'day_picker_dialog.dart';
 import 'event_dialog.dart';
+import 'sync_screen.dart';
 
 /// Logs feeds, diapers and sleep, each in its own tab.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.eventLog});
+  const HomeScreen({super.key, required this.eventLog, required this.sync});
 
   final EventLog eventLog;
+  final SyncController sync;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,9 +30,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   late final AppLifecycleListener _lifecycleListener;
 
+  /// The sync's pulled count when the list was last loaded.
+  late int _loadedPulledCount = widget.sync.pulledCount;
+
   @override
   void initState() {
     super.initState();
+    widget.sync.addListener(_reloadIfEventsArrived);
     _changeAndReload(() async {});
     // The app may have sat in the background past midnight.
     _lifecycleListener = AppLifecycleListener(
@@ -38,7 +47,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _lifecycleListener.dispose();
+    widget.sync.removeListener(_reloadIfEventsArrived);
     super.dispose();
+  }
+
+  void _reloadIfEventsArrived() {
+    final pulledCount = widget.sync.pulledCount;
+    if (pulledCount == _loadedPulledCount) return;
+    _loadedPulledCount = pulledCount;
+    _reload();
   }
 
   DateTime get _today {
@@ -77,11 +94,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'This is not today. You are changing $date.';
   }
 
-  /// Runs [change], then reloads the list. Failures are shown to the user, so
-  /// nobody assumes an event was saved when it wasn't.
+  /// Runs [change], reloads the list, then syncs in the background. unawaited
+  /// means "don't wait for this", so a slow network never holds up the screen.
   Future<void> _changeAndReload(Future<void> Function() change) async {
+    await _reload(change);
+    unawaited(widget.sync.sync());
+  }
+
+  /// Failures are shown to the user, so nobody assumes an event was saved
+  /// when it wasn't.
+  Future<void> _reload([Future<void> Function()? change]) async {
     try {
-      await change();
+      await change?.call();
       final events = await widget.eventLog.currentEvents();
       if (!mounted) return;
       setState(() => _events = events);
@@ -92,6 +116,21 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Something went wrong: $error')));
     }
+  }
+
+  void _openSyncScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => SyncScreen(sync: widget.sync)),
+    );
+  }
+
+  IconData _syncIcon() {
+    return switch (widget.sync.status) {
+      SyncStatus.notSetUp => Icons.cloud_off,
+      SyncStatus.syncing => Icons.cloud_sync,
+      SyncStatus.synced => Icons.cloud_done,
+      SyncStatus.failed => Icons.sync_problem,
+    };
   }
 
   Future<({DateTime time, double? amount})?> _askDetails({
@@ -205,7 +244,17 @@ class _HomeScreenState extends State<HomeScreen> {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Baby Tracker'),
+          title: const Text('BabyLog'),
+          actions: [
+            ListenableBuilder(
+              listenable: widget.sync,
+              builder: (context, _) => IconButton(
+                icon: Icon(_syncIcon()),
+                tooltip: 'Google Sheet',
+                onPressed: _openSyncScreen,
+              ),
+            ),
+          ],
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Feeds'),

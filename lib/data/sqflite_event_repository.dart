@@ -2,15 +2,17 @@ import 'package:sqflite/sqflite.dart';
 
 import 'baby_event.dart';
 import 'event_repository.dart';
+import 'sync/sync_controller.dart';
 
-/// Stores events in a SQLite database on the device.
-class SqfliteEventRepository implements EventRepository {
+/// Stores events and settings in a SQLite database on the device.
+class SqfliteEventRepository implements EventRepository, SettingsStore {
   SqfliteEventRepository._(this._database);
 
   final Database _database;
 
-  /// Opens the database at [path], creating the table on first use.
-  /// [factory] is passed in so tests can run SQLite on a PC.
+  /// Opens the database at [path], creating the tables on first use and
+  /// upgrading older databases. [factory] is passed in so tests can run
+  /// SQLite on a PC.
   static Future<SqfliteEventRepository> open(
     DatabaseFactory factory,
     String path,
@@ -18,21 +20,51 @@ class SqfliteEventRepository implements EventRepository {
     final database = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
-        onCreate: (db, version) => db.execute('''
-          CREATE TABLE events (
-            id TEXT PRIMARY KEY,
-            type TEXT NOT NULL,
-            timestamp INTEGER NOT NULL,
-            logged_at INTEGER NOT NULL,
-            logged_by TEXT NOT NULL,
-            amount REAL,
-            references_id TEXT
-          )
-        '''),
+        version: 2,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE events (
+              id TEXT PRIMARY KEY,
+              type TEXT NOT NULL,
+              timestamp INTEGER NOT NULL,
+              logged_at INTEGER NOT NULL,
+              logged_by TEXT NOT NULL,
+              amount REAL,
+              references_id TEXT
+            )
+          ''');
+          await _createSettingsTable(db);
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) await _createSettingsTable(db);
+        },
       ),
     );
     return SqfliteEventRepository._(database);
+  }
+
+  static Future<void> _createSettingsTable(Database db) {
+    return db.execute(
+      'CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+    );
+  }
+
+  @override
+  Future<String?> readSetting(String key) async {
+    final rows = await _database.query(
+      'settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    return rows.isEmpty ? null : rows.first['value'] as String;
+  }
+
+  @override
+  Future<void> writeSetting(String key, String value) async {
+    await _database.insert('settings', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   @override

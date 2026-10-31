@@ -66,6 +66,53 @@ void main() {
     expect(saved.single.id, 'feed-1');
   });
 
+  test('settings are saved, replaced and remembered', () async {
+    final first = await SqfliteEventRepository.open(databaseFactoryFfi, path);
+    expect(await first.readSetting('sheet'), isNull);
+
+    await first.writeSetting('sheet', 'one');
+    await first.writeSetting('sheet', 'two');
+    await first.close();
+
+    final second = await SqfliteEventRepository.open(databaseFactoryFfi, path);
+    final value = await second.readSetting('sheet');
+    await second.close();
+
+    expect(value, 'two');
+  });
+
+  test('upgrading an older database keeps its events', () async {
+    final older = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 1,
+        onCreate: (db, version) => db.execute('''
+          CREATE TABLE events (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            logged_at INTEGER NOT NULL,
+            logged_by TEXT NOT NULL,
+            amount REAL,
+            references_id TEXT
+          )
+        '''),
+      ),
+    );
+    await older.insert('events', feed.toMap());
+    await older.close();
+
+    final repository = await SqfliteEventRepository.open(
+      databaseFactoryFfi,
+      path,
+    );
+    await repository.writeSetting('sheet', 'one');
+    final saved = await repository.allEvents();
+    await repository.close();
+
+    expect(saved.single.id, 'feed-1');
+  });
+
   test('refuses a second event with the same ID', () async {
     final repository = await SqfliteEventRepository.open(
       databaseFactoryFfi,
