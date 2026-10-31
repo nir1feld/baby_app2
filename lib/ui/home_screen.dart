@@ -4,7 +4,7 @@ import '../data/baby_event.dart';
 import '../data/event_log.dart';
 import 'event_dialog.dart';
 
-/// Logs feeds, diapers and sleep, and lists what has been logged.
+/// Logs feeds, diapers and sleep, each in its own tab.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.eventLog});
 
@@ -131,46 +131,58 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final events = _events;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Baby Tracker')),
-      body: events == null
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _lastFeed(events),
-                _addButtons(),
-                const Divider(),
-                Expanded(child: _eventList(events)),
-              ],
-            ),
-    );
-  }
-
-  Widget _lastFeed(List<BabyEvent> events) {
-    final feed = latestFeed(events);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Text(
-        feed == null ? 'No feeds yet' : 'Last feed: ${_describe(feed)}',
-        style: Theme.of(context).textTheme.titleMedium,
+    // DefaultTabController keeps the TabBar and TabBarView on the same tab.
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Baby Tracker'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Feeds'),
+              Tab(text: 'Diapers'),
+              Tab(text: 'Sleep'),
+            ],
+          ),
+        ),
+        body: events == null
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                children: [
+                  _eventTab(events, EventType.feed, 'No feeds yet'),
+                  _eventTab(events, EventType.diaper, 'No diapers yet'),
+                  _eventTab(events, EventType.sleep, 'No sleep yet'),
+                ],
+              ),
       ),
     );
   }
 
-  Widget _addButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+  /// One tab: the latest event of [type], a button to log one, and the list.
+  Widget _eventTab(List<BabyEvent> events, EventType type, String emptyText) {
+    final latest = latestOfType(events, type);
+    return Column(
       children: [
-        FilledButton(onPressed: _addFeed, child: const Text('Feed')),
-        FilledButton(
-          onPressed: () =>
-              _changeAndReload(() => widget.eventLog.add(EventType.diaper)),
-          child: const Text('Diaper'),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            latest == null
+                ? emptyText
+                : 'Last ${type.name}: ${_describe(latest)}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
         ),
         FilledButton(
-          onPressed: () =>
-              _changeAndReload(() => widget.eventLog.add(EventType.sleep)),
-          child: const Text('Sleep'),
+          onPressed: type == EventType.feed
+              ? _addFeed
+              : () => _changeAndReload(() => widget.eventLog.add(type)),
+          child: Text('Log ${type.name}'),
+        ),
+        const Divider(),
+        Expanded(
+          child: _eventList(
+            events.where((event) => event.type == type).toList(),
+          ),
         ),
       ],
     );

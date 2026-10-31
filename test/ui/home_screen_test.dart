@@ -12,19 +12,27 @@ void main() {
   Future<void> openScreen(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: HomeScreen(
-          eventLog: EventLog(repository, loggedBy: 'parent'),
-        ),
+        home: HomeScreen(eventLog: EventLog(repository, loggedBy: 'parent')),
       ),
     );
     await tester.pumpAndSettle();
   }
 
   Future<void> logFeed(WidgetTester tester, String amount) async {
-    await tester.tap(find.widgetWithText(FilledButton, 'Feed'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Log feed'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), amount);
     await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> openTab(WidgetTester tester, String name) async {
+    await tester.tap(find.widgetWithText(Tab, name));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> tapButton(WidgetTester tester, String label) async {
+    await tester.tap(find.widgetWithText(FilledButton, label));
     await tester.pumpAndSettle();
   }
 
@@ -61,16 +69,41 @@ void main() {
   testWidgets('diaper and sleep log with one tap', (tester) async {
     await openScreen(tester);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Diaper'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Sleep'));
-    await tester.pumpAndSettle();
+    await openTab(tester, 'Diapers');
+    await tapButton(tester, 'Log diaper');
+    await openTab(tester, 'Sleep');
+    await tapButton(tester, 'Log sleep');
 
     expect(repository.events.map((event) => event.type), [
       EventType.diaper,
       EventType.sleep,
     ]);
-    expect(find.byType(ListTile), findsNWidgets(2));
+    expect(find.text('sleep'), findsOneWidget);
+  });
+
+  testWidgets('each tab shows only its own type of event', (tester) async {
+    await openScreen(tester);
+    await logFeed(tester, '120');
+    await openTab(tester, 'Diapers');
+
+    expect(find.text('No diapers yet'), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
+
+    await tapButton(tester, 'Log diaper');
+
+    expect(find.textContaining('Last diaper:'), findsOneWidget);
+    expect(find.text('diaper'), findsOneWidget);
+    expect(find.text('feed'), findsNothing);
+
+    await openTab(tester, 'Feeds');
+
+    expect(find.text('feed'), findsOneWidget);
+    expect(find.text('diaper'), findsNothing);
+
+    await openTab(tester, 'Sleep');
+
+    expect(find.text('No sleep yet'), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
   });
 
   testWidgets('tapping a row edits it by appending an edit event', (
@@ -114,8 +147,8 @@ void main() {
     await openScreen(tester);
     repository.failOnAppend = true;
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Diaper'));
-    await tester.pumpAndSettle();
+    await openTab(tester, 'Diapers');
+    await tapButton(tester, 'Log diaper');
 
     expect(find.textContaining('Something went wrong'), findsOneWidget);
     expect(find.byType(ListTile), findsNothing);

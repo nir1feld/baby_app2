@@ -74,9 +74,8 @@ class _EventDialogState extends State<EventDialog> {
             onPressed: _pickTime,
             icon: const Icon(Icons.schedule),
             label: Text(
-              MaterialLocalizations.of(
-                context,
-              ).formatTimeOfDay(TimeOfDay.fromDateTime(_time)),
+              MaterialLocalizations.of(context)
+                  .formatTimeOfDay(TimeOfDay.fromDateTime(_time)),
             ),
           ),
           if (widget.showAmount)

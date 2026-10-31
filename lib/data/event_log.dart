@@ -28,10 +28,10 @@ List<BabyEvent> deriveCurrentEvents(List<BabyEvent> log) {
   return current.values.toList()..sort(_newestFirst);
 }
 
-/// The newest feed in [currentEvents], or null if there are none.
-BabyEvent? latestFeed(List<BabyEvent> currentEvents) {
+/// The newest event of [type] in [currentEvents], or null if there are none.
+BabyEvent? latestOfType(List<BabyEvent> currentEvents, EventType type) {
   for (final event in currentEvents) {
-    if (event.type == EventType.feed) return event;
+    if (event.type == type) return event;
   }
   return null;
 }

@@ -33,15 +33,18 @@ void main() {
     expect(saved[0].amount, 120);
   });
 
-  test('current events are sorted newest first by when they happened', () async {
-    final earlier = DateTime.utc(2026, 10, 31, 8);
-    final later = DateTime.utc(2026, 10, 31, 9);
-    await log.add(EventType.diaper, timestamp: later);
-    await log.add(EventType.sleep, timestamp: earlier);
+  test(
+    'current events are sorted newest first by when they happened',
+    () async {
+      final earlier = DateTime.utc(2026, 10, 31, 8);
+      final later = DateTime.utc(2026, 10, 31, 9);
+      await log.add(EventType.diaper, timestamp: later);
+      await log.add(EventType.sleep, timestamp: earlier);
 
-    final types = (await log.currentEvents()).map((event) => event.type);
-    expect(types, [EventType.diaper, EventType.sleep]);
-  });
+      final types = (await log.currentEvents()).map((event) => event.type);
+      expect(types, [EventType.diaper, EventType.sleep]);
+    },
+  );
 
   test('editing appends an event and leaves the original untouched', () async {
     await log.add(EventType.feed, amount: 120);
@@ -98,22 +101,23 @@ void main() {
     expect(await log.currentEvents(), isEmpty);
   });
 
-  test('latestFeed skips other types and deleted feeds', () async {
+  test('latestOfType skips other types and deleted events', () async {
     final feedTime = DateTime.utc(2026, 10, 31, 8);
     await log.add(EventType.feed, timestamp: feedTime, amount: 100);
     await log.add(EventType.feed, timestamp: feedTime.add(_hour), amount: 110);
     await log.add(EventType.diaper, timestamp: feedTime.add(_hour * 2));
 
-    expect(latestFeed(await log.currentEvents())?.amount, 110);
+    final newestFeed = latestOfType(await log.currentEvents(), EventType.feed)!;
+    expect(newestFeed.amount, 110);
 
-    final newestFeed = latestFeed(await log.currentEvents())!;
     await log.delete(newestFeed);
 
-    expect(latestFeed(await log.currentEvents())?.amount, 100);
+    final remaining = await log.currentEvents();
+    expect(latestOfType(remaining, EventType.feed)?.amount, 100);
   });
 
-  test('latestFeed is null when there are no feeds', () {
-    expect(latestFeed([]), isNull);
+  test('latestOfType is null when there are none of that type', () {
+    expect(latestOfType([], EventType.feed), isNull);
   });
 }
 
