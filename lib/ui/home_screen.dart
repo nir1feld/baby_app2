@@ -1,0 +1,197 @@
+import 'package:flutter/material.dart';
+
+import '../data/baby_event.dart';
+import '../data/event_log.dart';
+import 'event_dialog.dart';
+
+/// Logs feeds, diapers and sleep, and lists what has been logged.
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key, required this.eventLog});
+
+  final EventLog eventLog;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  /// Null until the first load finishes.
+  List<BabyEvent>? _events;
+
+  @override
+  void initState() {
+    super.initState();
+    _changeAndReload(() async {});
+  }
+
+  /// Runs [change], then reloads the list. Failures are shown to the user, so
+  /// nobody assumes an event was saved when it wasn't.
+  Future<void> _changeAndReload(Future<void> Function() change) async {
+    try {
+      await change();
+      final events = await widget.eventLog.currentEvents();
+      if (!mounted) return;
+      setState(() => _events = events);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _events ??= const []);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Something went wrong: $error')));
+    }
+  }
+
+  Future<({DateTime time, double? amount})?> _askDetails({
+    required String title,
+    required DateTime initialTime,
+    required bool showAmount,
+    double? initialAmount,
+  }) {
+    return showDialog(
+      context: context,
+      builder: (_) => EventDialog(
+        title: title,
+        initialTime: initialTime,
+        showAmount: showAmount,
+        initialAmount: initialAmount,
+      ),
+    );
+  }
+
+  Future<void> _addFeed() async {
+    final details = await _askDetails(
+      title: 'Log feed',
+      initialTime: DateTime.now(),
+      showAmount: true,
+    );
+    if (details == null) return;
+    await _changeAndReload(
+      () => widget.eventLog.add(
+        EventType.feed,
+        timestamp: details.time,
+        amount: details.amount,
+      ),
+    );
+  }
+
+  Future<void> _edit(BabyEvent event) async {
+    final details = await _askDetails(
+      title: 'Edit ${_label(event)}',
+      initialTime: event.timestamp,
+      showAmount: event.type == EventType.feed,
+      initialAmount: event.amount,
+    );
+    if (details == null) return;
+    await _changeAndReload(
+      () => widget.eventLog.edit(
+        event,
+        timestamp: details.time,
+        amount: details.amount,
+      ),
+    );
+  }
+
+  Future<void> _delete(BabyEvent event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete this ${_label(event)}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _changeAndReload(() => widget.eventLog.delete(event));
+  }
+
+  String _label(BabyEvent event) => event.type.name;
+
+  String _formatTime(DateTime time) {
+    final local = time.toLocal();
+    final localizations = MaterialLocalizations.of(context);
+    final date = localizations.formatShortMonthDay(local);
+    final clock = localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local));
+    return '$date, $clock';
+  }
+
+  String _describe(BabyEvent event) {
+    final time = _formatTime(event.timestamp);
+    final amount = event.amount;
+    return amount == null ? time : '$time, $amount ml';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final events = _events;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Baby Tracker')),
+      body: events == null
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _lastFeed(events),
+                _addButtons(),
+                const Divider(),
+                Expanded(child: _eventList(events)),
+              ],
+            ),
+    );
+  }
+
+  Widget _lastFeed(List<BabyEvent> events) {
+    final feed = latestFeed(events);
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Text(
+        feed == null ? 'No feeds yet' : 'Last feed: ${_describe(feed)}',
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+    );
+  }
+
+  Widget _addButtons() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        FilledButton(onPressed: _addFeed, child: const Text('Feed')),
+        FilledButton(
+          onPressed: () =>
+              _changeAndReload(() => widget.eventLog.add(EventType.diaper)),
+          child: const Text('Diaper'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              _changeAndReload(() => widget.eventLog.add(EventType.sleep)),
+          child: const Text('Sleep'),
+        ),
+      ],
+    );
+  }
+
+  Widget _eventList(List<BabyEvent> events) {
+    return ListView.builder(
+      itemCount: events.length,
+      itemBuilder: (context, index) {
+        final event = events[index];
+        return ListTile(
+          title: Text(_label(event)),
+          subtitle: Text(_describe(event)),
+          onTap: () => _edit(event),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Delete',
+            onPressed: () => _delete(event),
+          ),
+        );
+      },
+    );
+  }
+}
