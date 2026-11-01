@@ -16,6 +16,15 @@ class GoogleSheetsEventLog implements RemoteEventLog {
   final String _spreadsheetId;
 
   @override
+  Future<String> fetchTitle() async {
+    final spreadsheet = await _api.spreadsheets.get(
+      _spreadsheetId,
+      $fields: 'properties.title',
+    );
+    return spreadsheet.properties?.title ?? 'Untitled sheet';
+  }
+
+  @override
   Future<List<BabyEvent>> fetchAll() async {
     await _ensureTabExists();
     final response = await _api.spreadsheets.values.get(

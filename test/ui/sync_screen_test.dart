@@ -38,16 +38,29 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  setUp(() {
+  setUp(() async {
     local = FakeEventRepository();
     remote = FakeRemoteEventLog();
     account = FakeSyncAccount(remote);
     sync = SyncController(
-      local: local,
+      store: FakeChildStore(local),
       settings: FakeSettingsStore(),
       account: account,
     );
+    await sync.load();
     eventLog = EventLog(local, loggedBy: 'parent');
+  });
+
+  testWidgets('shows which sheet is linked, and no link field', (tester) async {
+    await sync.signIn();
+    await sync.connectSheet(link);
+    await openSyncScreen(tester);
+
+    expect(
+      find.text('Sheet title is linked to its Google Sheet.'),
+      findsOneWidget,
+    );
+    expect(find.byType(TextField), findsNothing);
   });
 
   testWidgets('the app works without Google set up', (tester) async {

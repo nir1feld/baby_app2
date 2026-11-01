@@ -70,7 +70,7 @@ int _newestFirst(BabyEvent a, BabyEvent b) {
 /// The actions the UI can take on the log.
 class EventLog {
   EventLog(
-    this._repository, {
+    this.repository, {
     required this.loggedBy,
     this._clock = DateTime.now,
   });
@@ -79,14 +79,18 @@ class EventLog {
   /// changes when someone signs in.
   String loggedBy;
 
-  final EventRepository _repository;
+  /// The selected table's events, or null if there are no tables. Not final,
+  /// because switching tabs changes it.
+  EventRepository? repository;
+
   final DateTime Function() _clock;
   final Random _random = Random.secure();
 
   DateTime now() => _clock();
 
   Future<List<BabyEvent>> currentEvents() async {
-    return deriveCurrentEvents(await _repository.allEvents());
+    final events = await repository?.allEvents();
+    return deriveCurrentEvents(events ?? const []);
   }
 
   /// Logs a feed, diaper or sleep. [timestamp] defaults to now.
@@ -119,7 +123,8 @@ class EventLog {
     String? referencesId,
   }) {
     final now = _clock();
-    return _repository.append(
+    // Logging needs a table, and the UI only offers it when there is one.
+    return repository!.append(
       BabyEvent(
         id: _newId(),
         type: type,

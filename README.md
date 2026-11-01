@@ -36,8 +36,10 @@ The app works without any Google setup, but it won't sync.
    flutter build apk --dart-define-from-file=google_config.json
    ```
 
-In the app, tap the cloud icon, sign in, and paste the link to a blank Google
-Sheet that's shared with the other parents as editors.
+In the app, create a table and paste the link to a blank Google Sheet that's
+shared with the other parents as editors, then tap the cloud icon to sign in.
+Each table has its own tab and sheet, and the tab takes the sheet's title. Use
+the + button to add a table, and the X on a tab to remove it from the phone.
 
 ## Tests
 

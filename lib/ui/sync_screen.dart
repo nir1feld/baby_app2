@@ -78,13 +78,16 @@ class _SyncScreenState extends State<SyncScreen> {
   }
 
   List<Widget> _sheet() {
+    final table = widget.sync.selectedChild;
+    if (table == null) return const [Text('Add a table to link a sheet.')];
+    if (table.spreadsheetId != null) {
+      return [Text('${table.name} is linked to its Google Sheet.')];
+    }
     return [
       Text(
-        widget.sync.spreadsheetId == null
-            ? 'Create a blank Google Sheet, share it with the other parents '
-                  'as editors, and paste its link here. Everyone uses the '
-                  'same link.'
-            : 'A sheet is connected. Paste a link to switch to another one.',
+        '${table.name} has no sheet yet. Create a blank Google Sheet, share '
+        'it with the other parents as editors, and paste its link here. '
+        'Everyone uses the same link.',
       ),
       TextField(
         controller: _link,

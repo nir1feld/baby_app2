@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/baby_event.dart';
+import '../data/child.dart';
 import '../data/event_log.dart';
 import '../data/sync/sync_controller.dart';
+import 'add_table_dialog.dart';
 import 'day_picker_dialog.dart';
 import 'event_dialog.dart';
 import 'sync_screen.dart';
@@ -33,10 +35,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// The sync's pulled count when the list was last loaded.
   late int _loadedPulledCount = widget.sync.pulledCount;
 
+  /// The table whose list was last loaded.
+  late String? _loadedChildId = widget.sync.selectedChild?.id;
+
   @override
   void initState() {
     super.initState();
-    widget.sync.addListener(_reloadIfEventsArrived);
+    widget.sync.addListener(_reloadIfDataChanged);
     _changeAndReload(() async {});
     // The app may have sat in the background past midnight.
     _lifecycleListener = AppLifecycleListener(
@@ -47,14 +52,16 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _lifecycleListener.dispose();
-    widget.sync.removeListener(_reloadIfEventsArrived);
+    widget.sync.removeListener(_reloadIfDataChanged);
     super.dispose();
   }
 
-  void _reloadIfEventsArrived() {
+  void _reloadIfDataChanged() {
     final pulledCount = widget.sync.pulledCount;
-    if (pulledCount == _loadedPulledCount) return;
+    final childId = widget.sync.selectedChild?.id;
+    if (pulledCount == _loadedPulledCount && childId == _loadedChildId) return;
     _loadedPulledCount = pulledCount;
+    _loadedChildId = childId;
     _reload();
   }
 
@@ -121,6 +128,129 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openSyncScreen() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => SyncScreen(sync: widget.sync)),
+    );
+  }
+
+  /// Sync runs after the dialog closes, so a slow network can't hold it open.
+  /// Linking a sheet needs a sign-in, so that screen opens if there is none.
+  Future<void> _addTable() async {
+    final sync = widget.sync;
+    final added = await showDialog<bool>(
+      context: context,
+      builder: (_) => AddTableDialog(sync: sync),
+    );
+    if (added != true) return;
+    unawaited(sync.sync());
+    if (mounted && sync.email == null && sync.spreadsheetId != null) {
+      _openSyncScreen();
+    }
+  }
+
+  Future<void> _removeTable(Child table) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${table.name} from this phone?'),
+        content: const Text(
+          'The Google Sheet is not changed, and you can add it again with its '
+          'link. Logs that have not synced yet will be lost.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await widget.sync.removeTable(table.id);
+  }
+
+  /// One tab per table, and a button to add another. The key rebuilds the tab
+  /// controller when the tabs or the selection change, because a controller
+  /// can't change its length.
+  Widget _tableBar() {
+    final sync = widget.sync;
+    final tables = sync.children;
+    final selected = sync.selectedChild;
+    final ids = tables.map((table) => table.id).join(',');
+    return Row(
+      children: [
+        Expanded(
+          child: DefaultTabController(
+            key: ValueKey('$ids|${selected?.id}'),
+            length: tables.length,
+            initialIndex: tables.indexWhere(
+              (table) => table.id == selected?.id,
+            ),
+            child: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              onTap: (index) => sync.selectChild(tables[index].id),
+              tabs: [
+                for (final table in tables)
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(table.name),
+                        if (table.id == selected?.id)
+                          IconButton(
+                            iconSize: 18,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 28,
+                              height: 28,
+                            ),
+                            icon: const Icon(Icons.close),
+                            tooltip: 'Remove table',
+                            onPressed: () => _removeTable(table),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add),
+          tooltip: 'Add table',
+          onPressed: _addTable,
+        ),
+      ],
+    );
+  }
+
+  /// What a new phone shows, before there is anywhere to log.
+  Widget _noTables() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'No tables yet',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Create a table and link it to a Google Sheet to start logging.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _addTable,
+              child: const Text('Create a table'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -238,7 +368,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuilds the screen when a table is added, removed or selected, and
+    // when the sync status changes.
+    return ListenableBuilder(
+      listenable: widget.sync,
+      builder: (context, _) => _scaffold(),
+    );
+  }
+
+  Widget _scaffold() {
     final events = _events;
+    final hasTables = widget.sync.children.isNotEmpty;
     // DefaultTabController keeps the TabBar and TabBarView on the same tab.
     return DefaultTabController(
       length: 3,
@@ -246,24 +386,34 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           title: const Text('BabyLog'),
           actions: [
-            ListenableBuilder(
-              listenable: widget.sync,
-              builder: (context, _) => IconButton(
-                icon: Icon(_syncIcon()),
-                tooltip: 'Google Sheet',
-                onPressed: _openSyncScreen,
-              ),
+            IconButton(
+              icon: Icon(_syncIcon()),
+              tooltip: 'Google Sheet',
+              onPressed: _openSyncScreen,
             ),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Feeds'),
-              Tab(text: 'Diapers'),
-              Tab(text: 'Sleep'),
-            ],
-          ),
+          // PreferredSize tells the AppBar how tall these two rows are.
+          bottom: hasTables
+              ? PreferredSize(
+                  preferredSize: const Size.fromHeight(2 * kTextTabBarHeight),
+                  child: Column(
+                    children: [
+                      _tableBar(),
+                      const TabBar(
+                        tabs: [
+                          Tab(text: 'Feeds'),
+                          Tab(text: 'Diapers'),
+                          Tab(text: 'Sleep'),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              : null,
         ),
-        body: events == null
+        body: !hasTables
+            ? _noTables()
+            : events == null
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
