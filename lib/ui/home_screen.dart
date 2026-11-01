@@ -2,21 +2,30 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../data/amount_text.dart';
 import '../data/baby_event.dart';
 import '../data/child.dart';
 import '../data/event_log.dart';
+import '../data/log_kind.dart';
 import '../data/sync/sync_controller.dart';
 import 'add_table_dialog.dart';
 import 'day_picker_dialog.dart';
-import 'event_dialog.dart';
+import 'popups/log_dialog_frame.dart';
+import 'popups/log_popup.dart';
 import 'sync_screen.dart';
 
 /// Logs feeds, diapers and sleep, each in its own tab.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.eventLog, required this.sync});
+  const HomeScreen({
+    super.key,
+    required this.eventLog,
+    required this.sync,
+    required this.popups,
+  });
 
   final EventLog eventLog;
   final SyncController sync;
+  final Map<LogKind, LogPopup> popups;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -263,47 +272,50 @@ class _HomeScreenState extends State<HomeScreen> {
     };
   }
 
-  Future<({DateTime time, double? amount})?> _askDetails({
+  /// The ! says "not null here": every kind has a popup.
+  LogPopup _popupOf(LogKind kind) => widget.popups[kind]!;
+
+  Future<LogDetails?> _askDetails({
     required String title,
     required DateTime initialTime,
-    required bool showAmount,
+    required LogKind kind,
     double? initialAmount,
   }) {
-    return showDialog(
+    return showDialog<LogDetails>(
       context: context,
-      builder: (_) => EventDialog(
+      builder: (_) => _popupOf(kind).build(
         title: title,
         initialTime: initialTime,
-        showAmount: showAmount,
         initialAmount: initialAmount,
         warning: _pastDayWarning,
       ),
     );
   }
 
-  /// Today, a diaper or sleep logs with one tap. Feeds need an amount, and an
-  /// earlier day needs the warning and a time, so those open the dialog.
-  Future<void> _addEvent(EventType type) async {
-    final isFeed = type == EventType.feed;
+  /// A popup can log with one tap today. An earlier day always needs the
+  /// warning and a time, so it opens the popup.
+  Future<void> _addEvent(LogKind kind) async {
+    final popup = _popupOf(kind);
     final isToday = _pickedDay == null;
-    if (!isFeed && isToday) {
-      await _changeAndReload(() => widget.eventLog.add(type));
+    if (popup.logsWithOneTap && isToday) {
+      await _changeAndReload(() => widget.eventLog.add(kind.type));
       return;
     }
 
     final now = widget.eventLog.now().toLocal();
     final day = _day;
     final details = await _askDetails(
-      title: 'Log ${type.name}',
+      title: 'Log ${kind.name}',
       initialTime: isToday
           ? now
           : DateTime(day.year, day.month, day.day, now.hour, now.minute),
-      showAmount: isFeed,
+      kind: kind,
+      initialAmount: popup.newAmount,
     );
     if (details == null) return;
     await _changeAndReload(
       () => widget.eventLog.add(
-        type,
+        kind.type,
         timestamp: details.time,
         amount: details.amount,
       ),
@@ -314,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final details = await _askDetails(
       title: 'Edit ${_label(event)}',
       initialTime: event.timestamp,
-      showAmount: event.type == EventType.feed,
+      kind: LogKind.of(event.type),
       initialAmount: event.amount,
     );
     if (details == null) return;
@@ -363,7 +375,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _describe(BabyEvent event) {
     final time = _formatTime(event.timestamp);
     final amount = event.amount;
-    return amount == null ? time : '$time, $amount ml';
+    final unit = LogKind.of(event.type).measure?.unit;
+    if (amount == null || unit == null) return time;
+    return '$time, ${formatAmount(amount)} $unit';
   }
 
   @override
@@ -381,7 +395,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final hasTables = widget.sync.children.isNotEmpty;
     // DefaultTabController keeps the TabBar and TabBarView on the same tab.
     return DefaultTabController(
-      length: 3,
+      length: LogKind.values.length,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('BabyLog'),
@@ -399,11 +413,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     children: [
                       _tableBar(),
-                      const TabBar(
+                      TabBar(
                         tabs: [
-                          Tab(text: 'Feeds'),
-                          Tab(text: 'Diapers'),
-                          Tab(text: 'Sleep'),
+                          for (final kind in LogKind.values)
+                            Tab(text: kind.title),
                         ],
                       ),
                     ],
@@ -421,9 +434,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: TabBarView(
                       children: [
-                        _eventTab(events, EventType.feed, 'No feeds yet'),
-                        _eventTab(events, EventType.diaper, 'No diapers yet'),
-                        _eventTab(events, EventType.sleep, 'No sleep yet'),
+                        for (final kind in LogKind.values)
+                          _eventTab(events, kind),
                       ],
                     ),
                   ),
@@ -468,24 +480,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return MaterialLocalizations.of(context).formatMediumDate(day);
   }
 
-  /// One tab: the latest event of [type] on any day, a button to log one, and
+  /// One tab: the latest log of [kind] on any day, a button to log one, and
   /// the list for the day being viewed.
-  Widget _eventTab(List<BabyEvent> events, EventType type, String emptyText) {
-    final latest = latestOfType(events, type);
+  Widget _eventTab(List<BabyEvent> events, LogKind kind) {
+    final latest = latestOfType(events, kind.type);
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
           child: Text(
             latest == null
-                ? emptyText
-                : 'Last ${type.name}: ${_describe(latest)}',
+                ? kind.emptyText
+                : 'Last ${kind.name}: ${_describe(latest)}',
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
         FilledButton(
-          onPressed: () => _addEvent(type),
-          child: Text('Log ${type.name}'),
+          onPressed: () => _addEvent(kind),
+          child: Text('Log ${kind.name}'),
         ),
         const Divider(),
         Expanded(
@@ -493,7 +505,7 @@ class _HomeScreenState extends State<HomeScreen> {
             eventsOnDay(
               events,
               _day,
-            ).where((event) => event.type == type).toList(),
+            ).where((event) => event.type == kind.type).toList(),
           ),
         ),
       ],

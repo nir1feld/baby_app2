@@ -1,42 +1,40 @@
 import 'package:flutter/material.dart';
 
-/// Lets the user set an event's time and, for feeds, its amount in ml.
-/// Closes with the chosen values, or null if cancelled. The return type is a
-/// record: a small unnamed bundle of two values.
-class EventDialog extends StatefulWidget {
-  const EventDialog({
+/// What every popup shares: the title, an optional warning, the time button,
+/// and Cancel and Save. A popup puts its own controls in [children], the way
+/// a master page holds content in ASP.NET. The frame knows nothing about them.
+class LogDialogFrame extends StatefulWidget {
+  const LogDialogFrame({
     super.key,
     required this.title,
     required this.initialTime,
-    required this.showAmount,
-    this.initialAmount,
+    required this.onSave,
+    this.timeLabel,
     this.warning,
+    this.children = const [],
   });
 
   final String title;
   final DateTime initialTime;
-  final bool showAmount;
-  final double? initialAmount;
+
+  /// Shown before the time, when the time needs explaining.
+  final String? timeLabel;
 
   /// Shown at the top of the dialog when set.
   final String? warning;
 
+  final List<Widget> children;
+
+  /// Called with the chosen time when Save is tapped. The popup checks its
+  /// own controls, then closes the dialog with its result.
+  final ValueChanged<DateTime> onSave;
+
   @override
-  State<EventDialog> createState() => _EventDialogState();
+  State<LogDialogFrame> createState() => _LogDialogFrameState();
 }
 
-class _EventDialogState extends State<EventDialog> {
+class _LogDialogFrameState extends State<LogDialogFrame> {
   late DateTime _time = widget.initialTime.toLocal();
-  late final TextEditingController _amount = TextEditingController(
-    text: widget.initialAmount?.toString() ?? '',
-  );
-  String? _amountError;
-
-  @override
-  void dispose() {
-    _amount.dispose();
-    super.dispose();
-  }
 
   Future<void> _pickTime() async {
     final picked = await showTimePicker(
@@ -56,20 +54,15 @@ class _EventDialogState extends State<EventDialog> {
     }
   }
 
-  void _save() {
-    final text = _amount.text.trim().replaceAll(',', '.');
-    final amount = double.tryParse(text);
-    if (text.isNotEmpty && (amount == null || amount < 0)) {
-      setState(() => _amountError = 'Enter a number, or leave empty');
-      return;
-    }
-    Navigator.of(context).pop((time: _time, amount: amount));
-  }
-
   @override
   Widget build(BuildContext context) {
+    final time = MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay.fromDateTime(_time));
+    final timeLabel = widget.timeLabel;
     return AlertDialog(
       title: Text(widget.title),
+      // Lets the content scroll when the keyboard leaves it too little room.
+      scrollable: true,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,22 +71,9 @@ class _EventDialogState extends State<EventDialog> {
           TextButton.icon(
             onPressed: _pickTime,
             icon: const Icon(Icons.schedule),
-            label: Text(
-              MaterialLocalizations.of(context)
-                  .formatTimeOfDay(TimeOfDay.fromDateTime(_time)),
-            ),
+            label: Text(timeLabel == null ? time : '$timeLabel: $time'),
           ),
-          if (widget.showAmount)
-            TextField(
-              controller: _amount,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Amount (ml)',
-                errorText: _amountError,
-              ),
-            ),
+          ...widget.children,
         ],
       ),
       actions: [
@@ -101,7 +81,10 @@ class _EventDialogState extends State<EventDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _save, child: const Text('Save')),
+        FilledButton(
+          onPressed: () => widget.onSave(_time),
+          child: const Text('Save'),
+        ),
       ],
     );
   }

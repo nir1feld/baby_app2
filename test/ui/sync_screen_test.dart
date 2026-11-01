@@ -1,7 +1,9 @@
 import 'package:baby_app2/data/baby_event.dart';
 import 'package:baby_app2/data/event_log.dart';
+import 'package:baby_app2/data/feed_amounts.dart';
 import 'package:baby_app2/data/sync/sync_controller.dart';
 import 'package:baby_app2/ui/home_screen.dart';
+import 'package:baby_app2/ui/popups/log_popup.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,7 +22,11 @@ void main() {
   Future<void> openHome(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: HomeScreen(eventLog: eventLog, sync: sync),
+        home: HomeScreen(
+          eventLog: eventLog,
+          sync: sync,
+          popups: logPopups(FeedAmounts(FakeSettingsStore())),
+        ),
       ),
     );
     await tester.pumpAndSettle();

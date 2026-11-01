@@ -136,7 +136,20 @@ Next steps:
   offers to create one. Event IDs are unique per table, because a copied sheet
   can put the same event in two tables.
 
-\- Settings live in a SQLite table, to avoid another package.
+\- Settings live in a SQLite table, to avoid another package. They are never
+  synced. That includes the feed amount buttons, so each parent keeps their own
+  list and default.
+
+\- Each kind of log has its own popup: a `LogPopup` subclass in `lib/ui/popups`
+  that fills the shared `LogDialogFrame`. A feature for one kind stays in that
+  kind's popup, and the others never carry it. Widgets are composed, not
+  subclassed. Facts that the tabs and sheet need, such as titles, live in the
+  `LogKind` enum. Avoid `if feed` checks anywhere else.
+
+\- The sleep popup asks for a start and a finish. The start is the timestamp,
+  and the minutes between them are stored as the amount, so sync and the
+  database did not change and charts get a duration. The finish may be empty.
+  A finish earlier in the day than the start means the next day.
 
 \- The calendar is custom because Flutter's date picker cannot highlight
   individual days.
@@ -158,8 +171,10 @@ Next steps:
 \- `sqflite` does not run on the Windows or web targets. Use the Android
   emulator (`Medium_Phone_API_37.0`) to check the real app.
 
-\- I may be using the emulator myself. Check before restarting the app or
-  tapping, and never enter my Google password.
+\- When I ask for a change to a feature, you can close the emulator's app and
+  rebuild without asking, so I can try it. After a follow-up question, or any
+  other time, I may be using the emulator myself, so check before restarting
+  the app. Always check before tapping, and never enter my Google password.
 
 \- The Android package is `com.nir1feld.babylog`, tied to the Google OAuth
   client. Do not change it without updating that client.

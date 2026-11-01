@@ -1,14 +1,7 @@
 import 'package:googleapis/sheets/v4.dart';
 
 import '../baby_event.dart';
-
-/// The readable tabs of a sheet, one per kind of log. They hold what the log
-/// currently says, so edits are applied and deleted logs are left out.
-const summaryTabs = {
-  EventType.feed: 'Feeds',
-  EventType.diaper: 'Diapers',
-  EventType.sleep: 'Sleep',
-};
+import '../log_kind.dart';
 
 /// The cell properties that writing a readable tab replaces.
 const summaryCellFields =
@@ -16,26 +9,28 @@ const summaryCellFields =
     'userEnteredFormat.numberFormat,'
     'userEnteredFormat.textFormat.bold';
 
-/// The rows of a readable tab, newest first, with a header row on top.
-/// [currentEvents] must already be sorted newest first.
-List<RowData> summaryRows(EventType type, List<BabyEvent> currentEvents) {
-  final isFeed = type == EventType.feed;
+/// The rows of the readable tab of [kind], which holds what the log currently
+/// says: edits are applied and deleted logs are left out. Rows are newest
+/// first, with a header row on top. [currentEvents] must already be sorted
+/// newest first.
+List<RowData> summaryRows(LogKind kind, List<BabyEvent> currentEvents) {
+  final measure = kind.measure;
   return [
     RowData(
       values: [
         _header('Date'),
-        _header('Time'),
-        if (isFeed) _header('Amount (ml)'),
+        _header(kind.timeLabel),
+        if (measure != null) _header(measure.title),
         _header('Logged by'),
       ],
     ),
     for (final event in currentEvents)
-      if (event.type == type)
+      if (event.type == kind.type)
         RowData(
           values: [
             _date(event.timestamp),
             _time(event.timestamp),
-            if (isFeed) _amount(event.amount),
+            if (measure != null) _amount(event.amount),
             CellData(
               userEnteredValue: ExtendedValue(stringValue: event.loggedBy),
             ),
@@ -85,7 +80,7 @@ CellData _time(DateTime time) {
   );
 }
 
-/// A feed may have no amount, and then the cell stays empty.
+/// A log may have no amount, and then the cell stays empty.
 CellData _amount(double? amount) {
   return CellData(
     userEnteredValue: amount == null
