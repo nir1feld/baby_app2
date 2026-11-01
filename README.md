@@ -1,17 +1,47 @@
-# baby_app2
+# BabyLog
 
-A new Flutter project.
+A Flutter app (Android first) for parents to log feeds, diapers and sleep, and
+share the log across phones through a Google Sheet.
 
-## Getting Started
+- **Local first:** the app reads and writes a SQLite database on the phone, so
+  logging is instant and works offline.
+- **Append-only log:** edits and deletes are new events that refer to an
+  earlier event, so phones can merge their logs by exchanging missing rows.
+- **Swappable sync:** the app talks to the sheet through a small interface, so
+  another backend can replace it.
 
-This project is a starting point for a Flutter application.
+## Running the app
 
-A few resources to get you started if this is your first Flutter project:
+```
+flutter pub get
+flutter run
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+The app works without any Google setup, but it won't sync.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Setting up Google Sheets sync
+
+1. In a Google Cloud project, enable the Google Sheets API and set up the OAuth
+   consent screen with the `spreadsheets` scope.
+2. Create an Android OAuth client with your package name and signing SHA-1.
+   If you fork this project, change the package name in
+   `android/app/build.gradle.kts` first.
+3. Create a Web application OAuth client.
+4. Copy `google_config.example.json` to `google_config.json`, which git ignores,
+   and put the Web client ID in it.
+5. Pass the file when you run or build the app:
+
+   ```
+   flutter run --dart-define-from-file=google_config.json
+   flutter build apk --dart-define-from-file=google_config.json
+   ```
+
+In the app, tap the cloud icon, sign in, and paste the link to a blank Google
+Sheet that's shared with the other parents as editors.
+
+## Tests
+
+```
+flutter analyze
+flutter test
+```

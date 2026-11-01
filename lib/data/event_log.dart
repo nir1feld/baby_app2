@@ -75,12 +75,13 @@ class EventLog {
     this._clock = DateTime.now,
   });
 
+  /// Who is recorded as logging events from this phone. Not final, because it
+  /// changes when someone signs in.
+  String loggedBy;
+
   final EventRepository _repository;
   final DateTime Function() _clock;
   final Random _random = Random.secure();
-
-  /// Who is recorded as logging events from this phone.
-  final String loggedBy;
 
   DateTime now() => _clock();
 

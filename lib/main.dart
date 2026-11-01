@@ -4,7 +4,12 @@ import 'package:sqflite/sqflite.dart';
 
 import 'data/event_log.dart';
 import 'data/sqflite_event_repository.dart';
+import 'data/sync/google_sheets_account.dart';
+import 'data/sync/sync_controller.dart';
+import 'google_config.dart';
 import 'ui/home_screen.dart';
+
+const _loggedByWhenSignedOut = 'this phone';
 
 Future<void> main() async {
   // Needed because the database is opened before runApp.
@@ -14,27 +19,36 @@ Future<void> main() async {
     databaseFactory,
     join(await getDatabasesPath(), 'baby_tracker.db'),
   );
+  final eventLog = EventLog(repository, loggedBy: _loggedByWhenSignedOut);
+  final sync = SyncController(
+    local: repository,
+    settings: repository,
+    account: GoogleSheetsAccount(webClientId: googleWebClientId),
+  );
+  sync.addListener(() {
+    eventLog.loggedBy = sync.email ?? _loggedByWhenSignedOut;
+  });
 
-  // To use a hosted backend later, swap `repository` here. Nothing else changes.
-  // `loggedBy` is a placeholder until parents sign in with Google.
-  final eventLog = EventLog(repository, loggedBy: 'this phone');
+  runApp(BabyLogApp(eventLog: eventLog, sync: sync));
 
-  runApp(BabyTrackerApp(eventLog: eventLog));
+  // Not awaited before runApp, so a slow network can't delay opening the app.
+  await sync.start();
 }
 
-class BabyTrackerApp extends StatelessWidget {
-  const BabyTrackerApp({super.key, required this.eventLog});
+class BabyLogApp extends StatelessWidget {
+  const BabyLogApp({super.key, required this.eventLog, required this.sync});
 
   final EventLog eventLog;
+  final SyncController sync;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Baby Tracker',
+      title: 'BabyLog',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
       ),
-      home: HomeScreen(eventLog: eventLog),
+      home: HomeScreen(eventLog: eventLog, sync: sync),
     );
   }
 }

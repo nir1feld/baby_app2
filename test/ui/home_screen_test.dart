@@ -1,20 +1,27 @@
 import 'package:baby_app2/data/baby_event.dart';
 import 'package:baby_app2/data/event_log.dart';
+import 'package:baby_app2/data/sync/sync_controller.dart';
 import 'package:baby_app2/ui/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../fake_event_repository.dart';
+import '../fake_sync.dart';
 
 const notToday = 'This is not today';
 
 void main() {
   late FakeEventRepository repository;
   late EventLog eventLog;
+  late SyncController sync;
   late DateTime now;
 
   Future<void> openScreen(WidgetTester tester) async {
-    await tester.pumpWidget(MaterialApp(home: HomeScreen(eventLog: eventLog)));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(eventLog: eventLog, sync: sync),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -45,6 +52,11 @@ void main() {
     repository = FakeEventRepository();
     now = DateTime(2026, 10, 31, 12);
     eventLog = EventLog(repository, loggedBy: 'parent', clock: () => now);
+    sync = SyncController(
+      local: repository,
+      settings: FakeSettingsStore(),
+      account: FakeSyncAccount(FakeRemoteEventLog()),
+    );
   });
 
   testWidgets('starts empty', (tester) async {
