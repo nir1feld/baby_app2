@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../data/baby_event.dart';
+import '../../data/event_log.dart';
 import '../../data/log_kind.dart';
 import '../../data/sleep_times.dart';
 import 'log_dialog_frame.dart';
@@ -10,6 +12,11 @@ import 'log_popup.dart';
 /// sleep that hasn't ended yet.
 class SleepPopup extends LogPopup {
   const SleepPopup();
+
+  @override
+  Future<void> saveNew(EventLog log, EventType type, LogDetails details) {
+    return log.addSleep(details.time, details.amount);
+  }
 
   @override
   Widget build({

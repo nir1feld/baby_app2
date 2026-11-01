@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'baby_event.dart';
 import 'event_repository.dart';
+import 'sleep_merge.dart';
 
 /// Works out what the log currently says, newest first: edits are applied,
 /// and deleted events are left out.
@@ -96,6 +97,23 @@ class EventLog {
   /// Logs a feed, diaper or sleep. [timestamp] defaults to now.
   Future<void> add(EventType type, {DateTime? timestamp, double? amount}) {
     return _append(type, timestamp: timestamp, amount: amount);
+  }
+
+  /// Logs a sleep, or folds it into the sleeps it overlaps or continues. A
+  /// merge is an edit and deletes, like any other change to the log. A sleep
+  /// with no [minutes] hasn't ended, so it has nothing to merge yet.
+  Future<void> addSleep(DateTime timestamp, double? minutes) async {
+    final merge = minutes == null
+        ? null
+        : planSleepMerge(await currentEvents(), timestamp, minutes);
+    if (merge == null) {
+      await add(EventType.sleep, timestamp: timestamp, amount: minutes);
+      return;
+    }
+    await edit(merge.keep, timestamp: merge.start, amount: merge.minutes);
+    for (final sleep in merge.remove) {
+      await delete(sleep);
+    }
   }
 
   /// Corrects the time and amount of [original].

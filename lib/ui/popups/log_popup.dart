@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../../data/baby_event.dart';
+import '../../data/event_log.dart';
 import '../../data/feed_amounts.dart';
 import '../../data/log_kind.dart';
 import 'diaper_popup.dart';
@@ -20,6 +22,11 @@ abstract class LogPopup {
 
   /// What the amount of a new log starts as.
   double? get newAmount => null;
+
+  /// Saves what the popup returned as a new log of [type].
+  Future<void> saveNew(EventLog log, EventType type, LogDetails details) {
+    return log.add(type, timestamp: details.time, amount: details.amount);
+  }
 
   /// Builds the popup, which closes with [LogDetails], or null if cancelled.
   Widget build({

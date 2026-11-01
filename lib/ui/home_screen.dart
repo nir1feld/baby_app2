@@ -314,11 +314,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (details == null) return;
     await _changeAndReload(
-      () => widget.eventLog.add(
-        kind.type,
-        timestamp: details.time,
-        amount: details.amount,
-      ),
+      () => popup.saveNew(widget.eventLog, kind.type, details),
     );
   }
 
