@@ -151,6 +151,11 @@ Next steps:
   database did not change and charts get a duration. The finish may be empty.
   A finish earlier in the day than the start means the next day.
 
+\- A new sleep that overlaps or continues another merges into it, as an edit of
+  the earliest sleep and deletes of the rest, so the log stays append-only.
+  This only happens when adding a sleep with a finish on this phone, not when
+  editing one or when a sync brings one in.
+
 \- The calendar is custom because Flutter's date picker cannot highlight
   individual days.
 

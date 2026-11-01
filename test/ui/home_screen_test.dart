@@ -510,6 +510,33 @@ void main() {
       expect(repository.events.last.amount, 30);
     });
 
+    testWidgets('a sleep that continues another merges into one row', (
+      tester,
+    ) async {
+      await eventLog.add(
+        EventType.sleep,
+        timestamp: DateTime(2026, 10, 31, 11),
+        amount: 60,
+      );
+      await openSleepDialog(tester);
+
+      await pickFinish(tester, '1', '00');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListTile), findsOneWidget);
+      expect(find.textContaining('120 min'), findsNWidgets(2));
+    });
+
+    testWidgets('a feed never merges', (tester) async {
+      await eventLog.add(EventType.feed, timestamp: now, amount: 60);
+      await openScreen(tester);
+
+      await logFeed(tester, '90');
+
+      expect(find.byType(ListTile), findsNWidgets(2));
+    });
+
     testWidgets('a finish can be cleared', (tester) async {
       await openOldSleep(tester);
 
