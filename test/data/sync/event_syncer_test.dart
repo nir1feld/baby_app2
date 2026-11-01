@@ -30,6 +30,77 @@ void main() {
     syncer = EventSyncer(local, remote);
   });
 
+  group('the readable tabs', () {
+    late EventLog log;
+
+    setUp(() => log = EventLog(local, loggedBy: 'parent'));
+
+    test('hold edits as changes to the log, not as rows', () async {
+      await log.add(EventType.feed, amount: 100);
+      final original = (await log.currentEvents()).single;
+      await log.edit(original, timestamp: original.timestamp, amount: 150);
+
+      await syncer.sync();
+
+      expect(remote.summary!.single.id, original.id);
+      expect(remote.summary!.single.amount, 150);
+      expect(remote.events, hasLength(2));
+    });
+
+    test('leave out deleted logs', () async {
+      await log.add(EventType.feed, amount: 100);
+      await log.delete((await log.currentEvents()).single);
+
+      await syncer.sync();
+
+      expect(remote.summary, isEmpty);
+      expect(remote.events, hasLength(2));
+    });
+
+    test('include what was just downloaded', () async {
+      local.events.add(diaper('mine'));
+      remote.events.add(diaper('theirs'));
+
+      await syncer.sync();
+
+      expect(ids(remote.summary!), unorderedEquals(['mine', 'theirs']));
+    });
+
+    test('apply a delete made on another phone', () async {
+      local.events.add(diaper('a'));
+      await syncer.sync();
+      remote.events.add(
+        BabyEvent(
+          id: 'remove-a',
+          type: EventType.delete,
+          timestamp: DateTime.utc(2026, 10, 31, 9),
+          loggedAt: DateTime.utc(2026, 10, 31, 9),
+          loggedBy: 'other parent',
+          referencesId: 'a',
+        ),
+      );
+
+      await syncer.sync();
+
+      expect(remote.summary, isEmpty);
+    });
+
+    test('are written even when there is nothing new to copy', () async {
+      await syncer.sync();
+
+      expect(remote.summary, isEmpty);
+    });
+
+    test('failing to write them keeps the copied events', () async {
+      remote.events.add(diaper('theirs'));
+      remote.failOnSummary = true;
+
+      await expectLater(syncer.sync(), throwsA(anything));
+
+      expect(ids(local.events), ['theirs']);
+    });
+  });
+
   test('uploads events the sheet is missing', () async {
     local.events.add(diaper('a'));
 

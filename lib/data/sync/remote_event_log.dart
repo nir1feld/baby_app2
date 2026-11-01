@@ -12,4 +12,8 @@ abstract class RemoteEventLog {
 
   /// Adds [events] to the end of the log.
   Future<void> appendAll(List<BabyEvent> events);
+
+  /// Replaces the readable copy of the log with [currentEvents], which are
+  /// the logs as they stand now, newest first, without edits and deletes.
+  Future<void> writeSummary(List<BabyEvent> currentEvents);
 }

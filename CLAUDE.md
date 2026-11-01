@@ -78,8 +78,9 @@ interviews, so everything committed is public, including this file.
   personal was pushed, tell me straight away. Removing it means rewriting
   history, so ask first.
 
-\- Older commits already show my personal email as the author. Leave that
-  history alone unless I ask.
+\- Commits use my GitHub noreply address, set in this repo's git config. The
+  history was rewritten on 2026-11-01 to remove my personal email and surname.
+  Check the author and committer of new commits too.
 
 
 
@@ -119,6 +120,12 @@ Next steps:
 
 \- Sync exchanges missing rows by event ID. Bad rows in the sheet are skipped,
   and a row deleted from the sheet is restored by any phone that has it.
+
+\- People read the sheet's Feeds, Diapers and Sleep tabs, which the app rewrites
+  from the log at every sync: edits applied, deleted logs left out, real dates
+  and times for charts. Phones still sync through a hidden Events tab, because
+  edit and delete rows are how an offline phone learns about a change. Dates
+  are in the local time of the phone that wrote them.
 
 \- OAuth scope is `spreadsheets`, not `drive.file`: a shared sheet works by
   link, and `drive.file` would need a Picker that Flutter does not support.
