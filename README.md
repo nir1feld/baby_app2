@@ -41,6 +41,12 @@ shared with the other parents as editors, then tap the cloud icon to sign in.
 Each table has its own tab and sheet, and the tab takes the sheet's title. Use
 the + button to add a table, and the X on a tab to remove it from the phone.
 
+The sheet has a Feeds, a Diapers and a Sleep tab, with one row per log and real
+dates and times, so charts and pivot tables work on them directly. The app
+rewrites their first columns at every sync, so add your own formulas further
+right or on another tab. A hidden Events tab holds the full log that phones
+sync with. Leave it in place.
+
 ## Tests
 
 ```

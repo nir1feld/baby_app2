@@ -69,8 +69,20 @@ class FakeRemoteEventLog implements RemoteEventLog {
   /// Runs in the middle of a fetch, for logging during a sync.
   Future<void> Function()? duringFetch;
 
+  /// What the last sync wrote to the readable tabs, or null if nothing yet.
+  List<BabyEvent>? summary;
+
+  /// When true, only writing the readable tabs fails.
+  bool failOnSummary = false;
+
   @override
   Future<String> fetchTitle() async => title;
+
+  @override
+  Future<void> writeSummary(List<BabyEvent> currentEvents) async {
+    if (failOnSummary) throw const SyncException('summary failed');
+    summary = currentEvents;
+  }
 
   @override
   Future<List<BabyEvent>> fetchAll() async {

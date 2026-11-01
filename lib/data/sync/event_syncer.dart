@@ -1,4 +1,5 @@
 import '../baby_event.dart';
+import '../event_log.dart';
 import '../event_repository.dart';
 import 'remote_event_log.dart';
 
@@ -34,6 +35,10 @@ class EventSyncer {
     await _remote.appendAll(
       local.where((event) => !remoteIds.contains(event.id)).toList(),
     );
+
+    // Comes last, so it includes what was just downloaded. Every phone ends
+    // up with the same log, so whichever writes it, the result is the same.
+    await _remote.writeSummary(deriveCurrentEvents(await _local.allEvents()));
     return toPull.length;
   }
 }

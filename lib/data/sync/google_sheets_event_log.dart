@@ -1,11 +1,16 @@
+import 'dart:math';
+
 import 'package:googleapis/sheets/v4.dart';
 
 import '../baby_event.dart';
 import 'remote_event_log.dart';
 import 'sheet_row.dart';
+import 'sheet_summary.dart';
 
-/// Keeps the event log in the "Events" tab of a Google Sheet, one row per
-/// event. The tab is added if it's missing.
+/// Keeps the full event log in a hidden "Events" tab, one row per event,
+/// including edits and deletes, because that's how phones exchange changes.
+/// People read the tabs in [summaryTabs], which the app rewrites from the log.
+/// Missing tabs are added.
 class GoogleSheetsEventLog implements RemoteEventLog {
   GoogleSheetsEventLog(this._api, this._spreadsheetId);
 
@@ -14,6 +19,9 @@ class GoogleSheetsEventLog implements RemoteEventLog {
 
   final SheetsApi _api;
   final String _spreadsheetId;
+
+  /// The sheet's tabs by title, read once per sync.
+  Map<String, SheetProperties>? _tabs;
 
   @override
   Future<String> fetchTitle() async {
@@ -26,7 +34,7 @@ class GoogleSheetsEventLog implements RemoteEventLog {
 
   @override
   Future<List<BabyEvent>> fetchAll() async {
-    await _ensureTabExists();
+    await _prepareTabs();
     final response = await _api.spreadsheets.values.get(
       _spreadsheetId,
       _columns,
@@ -44,25 +52,119 @@ class GoogleSheetsEventLog implements RemoteEventLog {
     await _appendRows(events.map(eventToRow).toList());
   }
 
-  Future<void> _ensureTabExists() async {
+  /// Sent as one request, so a reader never sees a half-written tab.
+  @override
+  Future<void> writeSummary(List<BabyEvent> currentEvents) async {
+    final tabs = _tabs ?? await _prepareTabs();
+    final requests = <Request>[];
+    for (final MapEntry(key: type, value: title) in summaryTabs.entries) {
+      final tab = tabs[title]!;
+      final rows = summaryRows(type, currentEvents);
+
+      final missingRows = rows.length - (tab.gridProperties?.rowCount ?? 0);
+      if (missingRows > 0) {
+        requests.add(
+          Request(
+            appendDimension: AppendDimensionRequest(
+              sheetId: tab.sheetId,
+              dimension: 'ROWS',
+              length: missingRows,
+            ),
+          ),
+        );
+      }
+
+      // Cells in the range that rows don't cover are cleared, so logs that
+      // were deleted disappear. Columns further right are left alone, so
+      // people can add their own formulas there.
+      requests.add(
+        Request(
+          updateCells: UpdateCellsRequest(
+            fields: summaryCellFields,
+            rows: rows,
+            range: GridRange(
+              sheetId: tab.sheetId,
+              startColumnIndex: 0,
+              endColumnIndex: rows.first.values!.length,
+              startRowIndex: 0,
+              endRowIndex: max(rows.length, tab.gridProperties?.rowCount ?? 0),
+            ),
+          ),
+        ),
+      );
+    }
+    await _batchUpdate(requests);
+  }
+
+  /// Adds the tabs that are missing and hides the log. The readable tabs are
+  /// added first, because Sheets refuses to hide its only visible tab.
+  Future<Map<String, SheetProperties>> _prepareTabs() async {
+    var tabs = await _readTabs();
+    final logIsMissing = !tabs.containsKey(_tab);
+    final requests = [
+      for (final title in summaryTabs.values)
+        if (!tabs.containsKey(title)) _addSummaryTab(title),
+      if (logIsMissing) _addHiddenLogTab(),
+      if (!logIsMissing && tabs[_tab]!.hidden != true)
+        _hide(tabs[_tab]!.sheetId),
+    ];
+
+    if (requests.isNotEmpty) {
+      await _batchUpdate(requests);
+      tabs = await _readTabs();
+    }
+    if (logIsMissing) await _appendRows([sheetHeader]);
+    _tabs = tabs;
+    return tabs;
+  }
+
+  Future<Map<String, SheetProperties>> _readTabs() async {
     final spreadsheet = await _api.spreadsheets.get(
       _spreadsheetId,
-      $fields: 'sheets.properties.title',
+      $fields:
+          'sheets.properties(sheetId,title,hidden,gridProperties.rowCount)',
     );
-    final tabs = spreadsheet.sheets ?? const <Sheet>[];
-    if (tabs.any((tab) => tab.properties?.title == _tab)) return;
+    return {
+      for (final tab in spreadsheet.sheets ?? const <Sheet>[])
+        if (tab.properties?.title != null)
+          tab.properties!.title!: tab.properties!,
+    };
+  }
 
-    await _api.spreadsheets.batchUpdate(
-      BatchUpdateSpreadsheetRequest(
-        requests: [
-          Request(
-            addSheet: AddSheetRequest(properties: SheetProperties(title: _tab)),
-          ),
-        ],
+  Request _addSummaryTab(String title) {
+    return Request(
+      addSheet: AddSheetRequest(
+        properties: SheetProperties(
+          title: title,
+          // Keeps the header row in view when scrolling.
+          gridProperties: GridProperties(frozenRowCount: 1),
+        ),
       ),
+    );
+  }
+
+  Request _addHiddenLogTab() {
+    return Request(
+      addSheet: AddSheetRequest(
+        properties: SheetProperties(title: _tab, hidden: true),
+      ),
+    );
+  }
+
+  Request _hide(int? sheetId) {
+    return Request(
+      updateSheetProperties: UpdateSheetPropertiesRequest(
+        properties: SheetProperties(sheetId: sheetId, hidden: true),
+        fields: 'hidden',
+      ),
+    );
+  }
+
+  Future<void> _batchUpdate(List<Request> requests) async {
+    await _api.spreadsheets.batchUpdate(
+      BatchUpdateSpreadsheetRequest(requests: requests),
       _spreadsheetId,
     );
-    await _appendRows([sheetHeader]);
   }
 
   /// RAW stops Sheets from reformatting values, such as turning times into
