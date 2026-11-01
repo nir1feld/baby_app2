@@ -98,14 +98,14 @@ class SyncController extends ChangeNotifier {
   /// Syncs if the app is set up. Failures only update [status], because
   /// being offline is normal: the next sync picks up where this one stopped.
   Future<void> sync() async {
-    final spreadsheetId = _spreadsheetId;
-    if (email == null || spreadsheetId == null) {
+    if (email == null || _spreadsheetId == null) {
       // Keep any sign-in error on screen until the next attempt.
       if (_status != SyncStatus.failed) _status = SyncStatus.notSetUp;
       notifyListeners();
       return;
     }
-    // An event logged during a sync may have been missed, so go again after.
+    // An event logged during a sync may have been missed, or the sheet may
+    // have changed, so go again after.
     if (_running) {
       _runAgain = true;
       return;
@@ -117,8 +117,11 @@ class SyncController extends ChangeNotifier {
       _status = SyncStatus.syncing;
       notifyListeners();
       try {
+        // Read on each pass, so going again uses a newly connected sheet.
+        // The ! says "not null here", like C#'s null-forgiving operator, but
+        // Dart also checks it when the app runs.
         final pulled = await _account.withLog(
-          spreadsheetId,
+          _spreadsheetId!,
           (remote) => EventSyncer(_local, remote).sync(),
         );
         _pulledCount += pulled;
@@ -130,7 +133,7 @@ class SyncController extends ChangeNotifier {
         _message = '$error';
       }
       notifyListeners();
-    } while (_runAgain && _status == SyncStatus.synced);
+    } while (_runAgain);
     _running = false;
   }
 }

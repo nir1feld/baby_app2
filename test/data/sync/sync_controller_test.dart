@@ -6,6 +6,7 @@ import '../../fake_event_repository.dart';
 import '../../fake_sync.dart';
 
 const link = 'https://docs.google.com/spreadsheets/d/sheet-1/edit';
+const otherLink = 'https://docs.google.com/spreadsheets/d/sheet-2/edit';
 
 BabyEvent diaper(String id) {
   return BabyEvent(
@@ -126,6 +127,32 @@ void main() {
 
     expect(remote.events.map((event) => event.id), ['during']);
     expect(sync.status, SyncStatus.synced);
+  });
+
+  test('a sheet connected during a sync is used right after it', () async {
+    await sync.signIn();
+    await sync.connectSheet(link);
+    remote.duringFetch = () async {
+      await sync.connectSheet(otherLink);
+    };
+
+    await sync.sync();
+
+    expect(account.lastSpreadsheetId, 'sheet-2');
+  });
+
+  test('a sheet connected during a failing sync is still tried', () async {
+    await sync.signIn();
+    await sync.connectSheet(link);
+    local.events.add(diaper('a'));
+    remote.failOnAppend = true;
+    remote.duringFetch = () async {
+      await sync.connectSheet(otherLink);
+    };
+
+    await sync.sync();
+
+    expect(account.lastSpreadsheetId, 'sheet-2');
   });
 
   test('counts events that arrive, so screens can reload', () async {
