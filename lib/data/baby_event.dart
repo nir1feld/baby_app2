@@ -37,7 +37,8 @@ class BabyEvent {
 
   final String loggedBy;
 
-  /// Feed amount in ml. For an edit, the corrected amount.
+  /// The number this kind of log records: ml for a feed, minutes for a sleep.
+  /// For an edit, the corrected number.
   final double? amount;
 
   /// The event that an edit or delete applies to.

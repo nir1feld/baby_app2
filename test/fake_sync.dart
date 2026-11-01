@@ -1,9 +1,9 @@
 import 'package:baby_app2/data/baby_event.dart';
 import 'package:baby_app2/data/child.dart';
 import 'package:baby_app2/data/event_repository.dart';
+import 'package:baby_app2/data/settings_store.dart';
 import 'package:baby_app2/data/sync/remote_event_log.dart';
 import 'package:baby_app2/data/sync/sync_account.dart';
-import 'package:baby_app2/data/sync/sync_controller.dart';
 
 import 'fake_event_repository.dart';
 

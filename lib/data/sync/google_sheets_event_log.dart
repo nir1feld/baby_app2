@@ -3,13 +3,14 @@ import 'dart:math';
 import 'package:googleapis/sheets/v4.dart';
 
 import '../baby_event.dart';
+import '../log_kind.dart';
 import 'remote_event_log.dart';
 import 'sheet_row.dart';
 import 'sheet_summary.dart';
 
 /// Keeps the full event log in a hidden "Events" tab, one row per event,
 /// including edits and deletes, because that's how phones exchange changes.
-/// People read the tabs in [summaryTabs], which the app rewrites from the log.
+/// People read one tab per [LogKind], which the app rewrites from the log.
 /// Missing tabs are added.
 class GoogleSheetsEventLog implements RemoteEventLog {
   GoogleSheetsEventLog(this._api, this._spreadsheetId);
@@ -57,9 +58,9 @@ class GoogleSheetsEventLog implements RemoteEventLog {
   Future<void> writeSummary(List<BabyEvent> currentEvents) async {
     final tabs = _tabs ?? await _prepareTabs();
     final requests = <Request>[];
-    for (final MapEntry(key: type, value: title) in summaryTabs.entries) {
-      final tab = tabs[title]!;
-      final rows = summaryRows(type, currentEvents);
+    for (final kind in LogKind.values) {
+      final tab = tabs[kind.title]!;
+      final rows = summaryRows(kind, currentEvents);
 
       final missingRows = rows.length - (tab.gridProperties?.rowCount ?? 0);
       if (missingRows > 0) {
@@ -102,8 +103,8 @@ class GoogleSheetsEventLog implements RemoteEventLog {
     var tabs = await _readTabs();
     final logIsMissing = !tabs.containsKey(_tab);
     final requests = [
-      for (final title in summaryTabs.values)
-        if (!tabs.containsKey(title)) _addSummaryTab(title),
+      for (final kind in LogKind.values)
+        if (!tabs.containsKey(kind.title)) _addSummaryTab(kind.title),
       if (logIsMissing) _addHiddenLogTab(),
       if (!logIsMissing && tabs[_tab]!.hidden != true)
         _hide(tabs[_tab]!.sheetId),

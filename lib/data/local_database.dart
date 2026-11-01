@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import 'baby_event.dart';
 import 'child.dart';
 import 'event_repository.dart';
-import 'sync/sync_controller.dart';
+import 'settings_store.dart';
 
 /// Stores children, their events and settings in a SQLite database on the
 /// device.

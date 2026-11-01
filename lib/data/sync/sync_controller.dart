@@ -2,18 +2,12 @@ import 'package:flutter/foundation.dart';
 
 import '../child.dart';
 import '../event_repository.dart';
+import '../settings_store.dart';
 import 'event_syncer.dart';
 import 'sheet_row.dart';
 import 'sync_account.dart';
 
 enum SyncStatus { notSetUp, syncing, synced, failed }
-
-/// Reads and saves settings, so the selected child is remembered between app
-/// runs.
-abstract class SettingsStore {
-  Future<String?> readSetting(String key);
-  Future<void> writeSetting(String key, String value);
-}
 
 /// Tracks the children, runs their syncs, and keeps the state for the UI.
 /// ChangeNotifier is Flutter's version of INotifyPropertyChanged: listeners
