@@ -3,7 +3,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'data/event_log.dart';
-import 'data/sqflite_event_repository.dart';
+import 'data/local_database.dart';
 import 'data/sync/google_sheets_account.dart';
 import 'data/sync/sync_controller.dart';
 import 'google_config.dart';
@@ -15,18 +15,25 @@ Future<void> main() async {
   // Needed because the database is opened before runApp.
   WidgetsFlutterBinding.ensureInitialized();
 
-  final repository = await SqfliteEventRepository.open(
+  final database = await LocalDatabase.open(
     databaseFactory,
     join(await getDatabasesPath(), 'baby_tracker.db'),
   );
-  final eventLog = EventLog(repository, loggedBy: _loggedByWhenSignedOut);
   final sync = SyncController(
-    local: repository,
-    settings: repository,
+    store: database,
+    settings: database,
     account: GoogleSheetsAccount(webClientId: googleWebClientId),
   );
+  await sync.load();
+  final eventLog = EventLog(
+    sync.selectedEvents,
+    loggedBy: _loggedByWhenSignedOut,
+  );
+  // Added before HomeScreen's listener, so the log is up to date when the
+  // screen reloads after switching tabs.
   sync.addListener(() {
     eventLog.loggedBy = sync.email ?? _loggedByWhenSignedOut;
+    eventLog.repository = sync.selectedEvents;
   });
 
   runApp(BabyLogApp(eventLog: eventLog, sync: sync));

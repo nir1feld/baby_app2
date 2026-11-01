@@ -9,9 +9,11 @@ import '../fake_event_repository.dart';
 import '../fake_sync.dart';
 
 const notToday = 'This is not today';
+const secondLink = 'https://docs.google.com/spreadsheets/d/sheet-2/edit';
 
 void main() {
   late FakeEventRepository repository;
+  late FakeChildStore store;
   late EventLog eventLog;
   late SyncController sync;
   late DateTime now;
@@ -48,15 +50,120 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  setUp(() {
+  setUp(() async {
     repository = FakeEventRepository();
     now = DateTime(2026, 10, 31, 12);
     eventLog = EventLog(repository, loggedBy: 'parent', clock: () => now);
+    store = FakeChildStore(repository);
     sync = SyncController(
-      local: repository,
+      store: store,
       settings: FakeSettingsStore(),
       account: FakeSyncAccount(FakeRemoteEventLog()),
     );
+    await sync.load();
+    sync.addListener(() => eventLog.repository = sync.selectedEvents);
+  });
+
+  Future<void> addTableWithDialog(
+    WidgetTester tester, {
+    String name = '',
+    String link = '',
+  }) async {
+    await tapTooltip(tester, 'Add table');
+    await tester.enterText(find.byType(TextField).first, link);
+    await tester.enterText(find.byType(TextField).last, name);
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a new phone offers to create a table', (tester) async {
+    store.list.clear();
+    await sync.load();
+    await openScreen(tester);
+
+    expect(find.text('No tables yet'), findsOneWidget);
+    expect(find.text('Feeds'), findsNothing);
+
+    await tester.tap(find.text('Create a table'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Second');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No tables yet'), findsNothing);
+    expect(find.text('Feeds'), findsOneWidget);
+    expect(find.text('Second'), findsOneWidget);
+  });
+
+  testWidgets('each table has a tab with its own logs', (tester) async {
+    await openScreen(tester);
+    await logFeed(tester, '120');
+
+    await addTableWithDialog(tester, name: 'Second');
+    expect(find.text('Baby'), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
+
+    await logFeed(tester, '60');
+    expect(find.text('Oct 31, 12:00 PM, 60.0 ml'), findsOneWidget);
+
+    await tester.tap(find.text('Baby'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Oct 31, 12:00 PM, 120.0 ml'), findsOneWidget);
+    expect(find.text('Oct 31, 12:00 PM, 60.0 ml'), findsNothing);
+  });
+
+  testWidgets('a table added with a link asks to sign in', (tester) async {
+    await openScreen(tester);
+
+    await addTableWithDialog(tester, link: secondLink);
+
+    expect(find.text('Sign in with Google'), findsOneWidget);
+    expect(sync.spreadsheetId, 'sheet-2');
+  });
+
+  testWidgets('the add dialog explains what is wrong', (tester) async {
+    await openScreen(tester);
+
+    await addTableWithDialog(tester);
+    expect(find.text('Enter a name or a sheet link'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, 'not a link');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Paste the full link to the sheet'), findsOneWidget);
+    expect(sync.children, hasLength(1));
+  });
+
+  testWidgets('closing a tab asks first, then removes the table', (
+    tester,
+  ) async {
+    await openScreen(tester);
+    await addTableWithDialog(tester, name: 'Second');
+
+    await tapTooltip(tester, 'Remove table');
+    expect(find.text('Remove Second from this phone?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(sync.children, hasLength(2));
+
+    await tapTooltip(tester, 'Remove table');
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+
+    expect(sync.children, hasLength(1));
+    expect(find.text('Second'), findsNothing);
+  });
+
+  testWidgets('closing the last tab offers to create a table', (tester) async {
+    await openScreen(tester);
+
+    await tapTooltip(tester, 'Remove table');
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No tables yet'), findsOneWidget);
   });
 
   testWidgets('starts empty', (tester) async {

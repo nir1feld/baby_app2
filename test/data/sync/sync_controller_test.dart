@@ -23,19 +23,199 @@ void main() {
   late FakeRemoteEventLog remote;
   late FakeSyncAccount account;
   late FakeSettingsStore settings;
+  late FakeChildStore store;
   late SyncController sync;
 
-  setUp(() {
+  Future<void> addSheet(String sheetLink) async {
+    await sync.addTable(link: sheetLink);
+    await sync.sync();
+  }
+
+  setUp(() async {
     local = FakeEventRepository();
     remote = FakeRemoteEventLog();
     account = FakeSyncAccount(remote);
     settings = FakeSettingsStore();
+    store = FakeChildStore(local);
     sync = SyncController(
-      local: local,
+      store: store,
       settings: settings,
       account: account,
       clock: () => DateTime.utc(2026, 10, 31, 12),
     );
+    await sync.load();
+  });
+
+  group('several children', () {
+    late FakeRemoteEventLog secondSheet;
+
+    setUp(() async {
+      secondSheet = FakeRemoteEventLog(title: 'Second child');
+      account.otherSheets['sheet-2'] = secondSheet;
+      await sync.signIn();
+      await sync.connectSheet(link);
+    });
+
+    test('the first sheet goes to the child already on this phone', () {
+      expect(sync.children, hasLength(1));
+      expect(sync.spreadsheetId, 'sheet-1');
+    });
+
+    test('a child takes the name of their sheet', () {
+      expect(sync.selectedChild!.name, 'Sheet title');
+    });
+
+    test('a renamed sheet renames the child at the next sync', () async {
+      remote.title = 'New name';
+
+      await sync.sync();
+
+      expect(sync.selectedChild!.name, 'New name');
+    });
+
+    test('another link adds a child and selects them', () async {
+      await addSheet(otherLink);
+
+      expect(sync.children, hasLength(2));
+      expect(sync.spreadsheetId, 'sheet-2');
+      expect(sync.selectedChild!.name, 'Second child');
+    });
+
+    test('adding a child keeps the logs of both sheets apart', () async {
+      local.events.add(diaper('first-child'));
+      secondSheet.events.add(diaper('second-child'));
+
+      await addSheet(otherLink);
+
+      final saved = await sync.selectedEvents!.allEvents();
+      expect(saved.map((event) => event.id), ['second-child']);
+      expect(remote.events.map((event) => event.id), ['first-child']);
+      expect(secondSheet.events.map((event) => event.id), ['second-child']);
+    });
+
+    test('a link already connected selects that child', () async {
+      await addSheet(otherLink);
+
+      await sync.connectSheet(link);
+
+      expect(sync.children, hasLength(2));
+      expect(sync.spreadsheetId, 'sheet-1');
+    });
+
+    test('a sync covers children that are not on screen', () async {
+      await addSheet(otherLink);
+      local.events.add(diaper('first-child'));
+
+      await sync.sync();
+
+      expect(remote.events.map((event) => event.id), ['first-child']);
+    });
+
+    test('a failing sheet does not stop the others, and is named', () async {
+      await addSheet(otherLink);
+      remote.offline = true;
+      store.events('sheet-2').events.add(diaper('second-child'));
+
+      await sync.sync();
+
+      expect(secondSheet.events, hasLength(1));
+      expect(sync.status, SyncStatus.failed);
+      expect(sync.message, 'Sheet title: offline');
+    });
+
+    test('remembers the selected child on the next start', () async {
+      await addSheet(otherLink);
+
+      final restarted = SyncController(
+        store: store,
+        settings: settings,
+        account: account,
+      );
+      await restarted.load();
+
+      expect(restarted.spreadsheetId, 'sheet-2');
+    });
+
+    test('removing a child selects another and keeps their sheet', () async {
+      await addSheet(otherLink);
+      secondSheet.events.add(diaper('second-child'));
+      await sync.sync();
+
+      await sync.removeTable(sync.selectedChild!.id);
+
+      expect(sync.children, hasLength(1));
+      expect(sync.spreadsheetId, 'sheet-1');
+      expect(secondSheet.events, hasLength(1));
+    });
+
+    test('a removed sheet brings its logs back when added again', () async {
+      await addSheet(otherLink);
+      secondSheet.events.add(diaper('second-child'));
+      await sync.sync();
+      await sync.removeTable(sync.selectedChild!.id);
+
+      await addSheet(otherLink);
+
+      final saved = await sync.selectedEvents!.allEvents();
+      expect(saved.map((event) => event.id), ['second-child']);
+    });
+
+    test('removing the last table leaves none', () async {
+      await sync.removeTable(sync.selectedChild!.id);
+
+      expect(sync.children, isEmpty);
+      expect(sync.selectedChild, isNull);
+      expect(sync.selectedEvents, isNull);
+      expect(sync.status, SyncStatus.notSetUp);
+    });
+
+    test('removing a failing table clears the failure', () async {
+      await addSheet(otherLink);
+      secondSheet.offline = true;
+      await sync.sync();
+      expect(sync.status, SyncStatus.failed);
+
+      await sync.removeTable(sync.selectedChild!.id);
+
+      expect(sync.status, SyncStatus.synced);
+      expect(sync.message, isNull);
+    });
+
+    test('a table can be added with a name and no sheet', () async {
+      final added = await sync.addTable(name: ' Second ');
+
+      expect(added, isTrue);
+      expect(sync.selectedChild!.name, 'Second');
+      expect(sync.spreadsheetId, isNull);
+    });
+
+    test('a table needs a name or a valid link', () async {
+      expect(await sync.addTable(), isFalse);
+      expect(await sync.addTable(name: 'Second', link: 'bad'), isFalse);
+
+      expect(sync.children, hasLength(1));
+    });
+
+    test('a table without a sheet can be linked later', () async {
+      await sync.addTable(name: 'Second');
+
+      await sync.connectSheet(otherLink);
+
+      expect(sync.children, hasLength(2));
+      expect(sync.spreadsheetId, 'sheet-2');
+      expect(sync.selectedChild!.name, 'Second child');
+    });
+  });
+
+  test('a new phone has no tables and syncs nothing', () async {
+    store.list.clear();
+    await sync.load();
+    await sync.signIn();
+
+    expect(sync.children, isEmpty);
+    expect(sync.selectedChild, isNull);
+    expect(sync.status, SyncStatus.notSetUp);
+    expect(await sync.connectSheet(link), isFalse);
   });
 
   test('does nothing until signed in with a sheet connected', () async {
@@ -78,10 +258,11 @@ void main() {
 
     final account2 = FakeSyncAccount(remote)..restoredEmail = 'a@example.com';
     final restarted = SyncController(
-      local: local,
+      store: store,
       settings: settings,
       account: account2,
     );
+    await restarted.load();
     await restarted.start();
 
     expect(restarted.spreadsheetId, 'sheet-1');
@@ -133,7 +314,7 @@ void main() {
     await sync.signIn();
     await sync.connectSheet(link);
     remote.duringFetch = () async {
-      await sync.connectSheet(otherLink);
+      await addSheet(otherLink);
     };
 
     await sync.sync();
@@ -147,7 +328,7 @@ void main() {
     local.events.add(diaper('a'));
     remote.failOnAppend = true;
     remote.duringFetch = () async {
-      await sync.connectSheet(otherLink);
+      await addSheet(otherLink);
     };
 
     await sync.sync();

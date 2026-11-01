@@ -123,6 +123,12 @@ Next steps:
 \- OAuth scope is `spreadsheets`, not `drive.file`: a shared sheet works by
   link, and `drive.file` would need a Picker that Flutter does not support.
 
+\- Each table has its own tab, local log and sheet, and a tab is named after
+  its sheet's title. A table can also exist without a sheet. The code calls a
+  table `Child`. Every sync covers all tables. A new phone has no tables and
+  offers to create one. Event IDs are unique per table, because a copied sheet
+  can put the same event in two tables.
+
 \- Settings live in a SQLite table, to avoid another package.
 
 \- The calendar is custom because Flutter's date picker cannot highlight
