@@ -16,3 +16,14 @@ double sleepMinutes(DateTime start, {required int hour, required int minute}) {
   }
   return finish.difference(from).inMinutes.toDouble();
 }
+
+/// True if a sleep from [start] lasting [minutes] is still going after the
+/// next midnight, so it shows on two days. Ending exactly at midnight does
+/// not count, the same as in the day lists.
+bool sleepPassesMidnight(DateTime start, double minutes) {
+  final local = start.toLocal();
+  final end = local.add(Duration(minutes: minutes.round()));
+  // DateTime rolls day 32 over into the next month.
+  final midnight = DateTime(local.year, local.month, local.day + 1);
+  return end.isAfter(midnight);
+}

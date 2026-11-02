@@ -52,8 +52,32 @@ class _SleepDialog extends StatefulWidget {
 }
 
 class _SleepDialogState extends State<_SleepDialog> {
+  /// Kept up to date from the frame, so the note below follows a new start.
+  late DateTime _start = widget.initialTime.toLocal();
+
   /// Null until a finish is chosen.
   late TimeOfDay? _finish = _initialFinish();
+
+  /// The minutes from the start to the finish, or null with no finish.
+  double? get _minutes {
+    final finish = _finish;
+    if (finish == null) return null;
+    return sleepMinutes(_start, hour: finish.hour, minute: finish.minute);
+  }
+
+  bool get _passesMidnight {
+    final minutes = _minutes;
+    return minutes != null && sleepPassesMidnight(_start, minutes);
+  }
+
+  /// Such as "Spans 2 days: Oct 30 and Oct 31".
+  String _spanNote() {
+    final localizations = MaterialLocalizations.of(context);
+    final nextDay = DateTime(_start.year, _start.month, _start.day + 1);
+    final first = localizations.formatShortMonthDay(_start);
+    final second = localizations.formatShortMonthDay(nextDay);
+    return 'Spans 2 days: $first and $second';
+  }
 
   TimeOfDay? _initialFinish() {
     final minutes = widget.initialDuration;
@@ -74,25 +98,22 @@ class _SleepDialogState extends State<_SleepDialog> {
   }
 
   void _save(DateTime start) {
-    final finish = _finish;
-    final LogDetails details = (
-      time: start,
-      amount: finish == null
-          ? null
-          : sleepMinutes(start, hour: finish.hour, minute: finish.minute),
-    );
+    _start = start;
+    final LogDetails details = (time: start, amount: _minutes);
     Navigator.of(context).pop(details);
   }
 
   @override
   Widget build(BuildContext context) {
     final finish = _finish;
+    final passesMidnight = _passesMidnight;
     return LogDialogFrame(
       title: widget.title,
       initialTime: widget.initialTime,
       timeLabel: LogKind.sleep.timeLabel,
       warning: widget.warning,
       onSave: _save,
+      onTimeChanged: (start) => setState(() => _start = start),
       children: [
         Row(
           children: [
@@ -102,7 +123,8 @@ class _SleepDialogState extends State<_SleepDialog> {
               label: Text(
                 finish == null
                     ? 'Finish: not set'
-                    : 'Finish: ${finish.format(context)}',
+                    : 'Finish: ${finish.format(context)}'
+                          '${passesMidnight ? ' (next day)' : ''}',
               ),
             ),
             if (finish != null)
@@ -113,6 +135,17 @@ class _SleepDialogState extends State<_SleepDialog> {
               ),
           ],
         ),
+        if (passesMidnight)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                const Icon(Icons.nights_stay_outlined, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_spanNote())),
+              ],
+            ),
+          ),
       ],
     );
   }

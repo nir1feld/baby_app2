@@ -436,14 +436,16 @@ void main() {
     Future<void> pickFinish(
       WidgetTester tester,
       String hour,
-      String minute,
-    ) async {
+      String minute, {
+      String? period,
+    }) async {
       await tester.tap(find.textContaining('Finish: '));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.keyboard_outlined));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, hour);
       await tester.enterText(find.byType(TextField).last, minute);
+      if (period != null) await tester.tap(find.text(period));
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
     }
@@ -498,6 +500,31 @@ void main() {
       await openOldSleep(tester);
 
       expect(find.text('Finish: 12:30 PM'), findsOneWidget);
+      expect(find.textContaining('Spans 2 days'), findsNothing);
+    });
+
+    testWidgets('the note follows a new start as well as a new finish', (
+      tester,
+    ) async {
+      await openSleepDialog(tester);
+
+      await pickFinish(tester, '6', '00', period: 'AM');
+      expect(find.text('Finish: 6:00 AM (next day)'), findsOneWidget);
+      expect(find.text('Spans 2 days: Oct 31 and Nov 1'), findsOneWidget);
+
+      // A start of 5:00 AM puts the 6:00 AM finish on the same day.
+      await tester.tap(find.textContaining('Start: '));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.keyboard_outlined));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '5');
+      await tester.enterText(find.byType(TextField).last, '00');
+      await tester.tap(find.text('AM'));
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Finish: 6:00 AM'), findsOneWidget);
+      expect(find.textContaining('Spans 2 days'), findsNothing);
     });
 
     testWidgets('saving an edit unchanged keeps the duration', (tester) async {
@@ -548,6 +575,76 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repository.events.last.amount, isNull);
+    });
+
+    testWidgets('a sleep past midnight shows on both days', (tester) async {
+      await eventLog.add(
+        EventType.sleep,
+        timestamp: DateTime(2026, 10, 30, 22),
+        amount: 480,
+      );
+      await openScreen(tester);
+      await openTab(tester, 'Sleep');
+
+      expect(find.byType(ListTile), findsOneWidget);
+      await tapTooltip(tester, 'Previous day');
+      expect(find.byType(ListTile), findsOneWidget);
+    });
+
+    testWidgets('a sleep past midnight shows both dates and its days', (
+      tester,
+    ) async {
+      await eventLog.add(
+        EventType.sleep,
+        timestamp: DateTime(2026, 10, 30, 22),
+        amount: 480,
+      );
+      await openScreen(tester);
+      await openTab(tester, 'Sleep');
+
+      expect(find.text('sleep, 2 days'), findsOneWidget);
+      expect(
+        find.text('Oct 30, 10:00 PM – Oct 31, 6:00 AM, 480 min'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a sleep within one day shows only its start', (tester) async {
+      await eventLog.add(EventType.sleep, timestamp: now, amount: 30);
+      await openScreen(tester);
+      await openTab(tester, 'Sleep');
+
+      expect(find.text('sleep'), findsOneWidget);
+      expect(find.text('Oct 31, 12:00 PM, 30 min'), findsOneWidget);
+    });
+
+    testWidgets('an edit that ends it before midnight leaves today', (
+      tester,
+    ) async {
+      await eventLog.add(
+        EventType.sleep,
+        timestamp: DateTime(2026, 10, 30, 22),
+        amount: 480,
+      );
+      await openScreen(tester);
+      await openTab(tester, 'Sleep');
+      await tester.tap(find.byType(ListTile));
+      await tester.pumpAndSettle();
+      expect(find.text('Finish: 6:00 AM (next day)'), findsOneWidget);
+      expect(find.text('Spans 2 days: Oct 30 and Oct 31'), findsOneWidget);
+
+      await pickFinish(tester, '11', '00', period: 'PM');
+      expect(find.text('Finish: 11:00 PM'), findsOneWidget);
+      expect(find.textContaining('Spans 2 days'), findsNothing);
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListTile), findsNothing);
+      await tapTooltip(tester, 'Previous day');
+      expect(find.byType(ListTile), findsOneWidget);
+      // One in the list and one in the "Last sleep" line.
+      expect(find.textContaining('60 min'), findsNWidgets(2));
     });
   });
 

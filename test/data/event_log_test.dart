@@ -162,6 +162,99 @@ void main() {
     expect(eventsOnDay(events, DateTime(2026, 10, 31)), hasLength(1));
     expect(eventsOnDay(events, DateTime(2026, 11, 1)), isEmpty);
   });
+
+  group('a sleep past midnight', () {
+    // 22:00 on 30 October until 06:00 on 31 October.
+    final start = DateTime(2026, 10, 30, 22);
+    const eightHours = 480.0;
+
+    test('shows on the day it starts and the day it ends', () async {
+      await log.add(EventType.sleep, timestamp: start, amount: eightHours);
+      final events = await log.currentEvents();
+
+      expect(eventsOnDay(events, DateTime(2026, 10, 29)), isEmpty);
+      expect(eventsOnDay(events, DateTime(2026, 10, 30)), hasLength(1));
+      expect(eventsOnDay(events, DateTime(2026, 10, 31)), hasLength(1));
+      expect(eventsOnDay(events, DateTime(2026, 11, 1)), isEmpty);
+      expect(daysWithEvents(events), {
+        DateTime(2026, 10, 30),
+        DateTime(2026, 10, 31),
+      });
+    });
+
+    test('daysOf lists every day it covers, in order', () async {
+      await log.add(EventType.sleep, timestamp: start, amount: eightHours);
+
+      expect(daysOf((await log.currentEvents()).single), [
+        DateTime(2026, 10, 30),
+        DateTime(2026, 10, 31),
+      ]);
+    });
+
+    test('ending exactly at midnight stays on its own day', () async {
+      await log.add(EventType.sleep, timestamp: start, amount: 120);
+      final events = await log.currentEvents();
+
+      expect(eventsOnDay(events, DateTime(2026, 10, 31)), isEmpty);
+      expect(daysWithEvents(events), {DateTime(2026, 10, 30)});
+    });
+
+    test('a sleep with no finish stays on its own day', () async {
+      await log.add(EventType.sleep, timestamp: start);
+      final events = await log.currentEvents();
+
+      expect(eventsOnDay(events, DateTime(2026, 10, 31)), isEmpty);
+    });
+
+    test('a feed amount is not minutes, so it never carries on', () async {
+      await log.add(EventType.feed, timestamp: start, amount: eightHours);
+      final events = await log.currentEvents();
+
+      expect(eventsOnDay(events, DateTime(2026, 10, 31)), isEmpty);
+    });
+
+    test('a sleep over two midnights shows on every day', () async {
+      await log.add(EventType.sleep, timestamp: start, amount: 30 * 60);
+
+      expect(daysWithEvents(await log.currentEvents()), {
+        DateTime(2026, 10, 30),
+        DateTime(2026, 10, 31),
+        DateTime(2026, 11, 1),
+      });
+    });
+
+    test('an edit that ends it before midnight leaves the next day', () async {
+      await log.add(EventType.sleep, timestamp: start, amount: eightHours);
+      final sleep = (await log.currentEvents()).single;
+
+      await log.edit(sleep, timestamp: start, amount: 60);
+      final events = await log.currentEvents();
+
+      expect(eventsOnDay(events, DateTime(2026, 10, 30)), hasLength(1));
+      expect(eventsOnDay(events, DateTime(2026, 10, 31)), isEmpty);
+      expect(daysWithEvents(events), {DateTime(2026, 10, 30)});
+    });
+
+    test('an edit that moves it past midnight adds the next day', () async {
+      await log.add(EventType.sleep, timestamp: start, amount: 60);
+      final sleep = (await log.currentEvents()).single;
+
+      await log.edit(sleep, timestamp: start, amount: eightHours);
+      final events = await log.currentEvents();
+
+      expect(eventsOnDay(events, DateTime(2026, 10, 31)), hasLength(1));
+    });
+
+    test('a deleted sleep leaves both days', () async {
+      await log.add(EventType.sleep, timestamp: start, amount: eightHours);
+      await log.delete((await log.currentEvents()).single);
+      final events = await log.currentEvents();
+
+      expect(eventsOnDay(events, DateTime(2026, 10, 30)), isEmpty);
+      expect(eventsOnDay(events, DateTime(2026, 10, 31)), isEmpty);
+      expect(daysWithEvents(events), isEmpty);
+    });
+  });
 }
 
 const _hour = Duration(hours: 1);

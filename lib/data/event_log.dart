@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'baby_event.dart';
 import 'event_repository.dart';
+import 'log_kind.dart';
 import 'sleep_merge.dart';
 
 /// Works out what the log currently says, newest first: edits are applied,
@@ -37,19 +38,50 @@ BabyEvent? latestOfType(List<BabyEvent> currentEvents, EventType type) {
   return null;
 }
 
-/// The events in [currentEvents] that happened on the same local day as [day].
+/// When [event] ends. A kind whose amount is minutes, such as a sleep, ends
+/// that many minutes after it starts. Anything else lasts a single moment.
+/// [event] must be a log, not an edit or delete, which have no kind.
+DateTime eventEnd(BabyEvent event) {
+  final amount = event.amount;
+  final isMinutes = LogKind.of(event.type).measure?.isMinutes ?? false;
+  if (amount == null || !isMinutes) return event.timestamp;
+  return event.timestamp.add(Duration(minutes: amount.round()));
+}
+
+/// The events in [currentEvents] that happened on the local day [day], or
+/// started earlier and were still going on it. A sleep from 22:00 to 06:00
+/// shows on both days. One that ends exactly at midnight shows only on the
+/// day it started.
 List<BabyEvent> eventsOnDay(List<BabyEvent> currentEvents, DateTime day) {
+  final dayStart = DateTime(day.year, day.month, day.day);
+  // DateTime rolls day 32 over into the next month.
+  final nextDay = DateTime(day.year, day.month, day.day + 1);
   return currentEvents.where((event) {
-    final time = event.timestamp.toLocal();
-    return time.year == day.year &&
-        time.month == day.month &&
-        time.day == day.day;
+    final start = event.timestamp;
+    if (start.isBefore(dayStart)) return eventEnd(event).isAfter(dayStart);
+    return start.isBefore(nextDay);
   }).toList();
 }
 
-/// The local days that have at least one event in [currentEvents].
+/// The local days [event] happens on, in order: one day, or more for a sleep
+/// that carries on past midnight. Ending exactly at midnight adds no day.
+List<DateTime> daysOf(BabyEvent event) {
+  final end = eventEnd(event);
+  final days = <DateTime>[];
+  var day = _localDay(event.timestamp);
+  // do-while runs once before checking, so the start day always counts.
+  do {
+    days.add(day);
+    day = DateTime(day.year, day.month, day.day + 1);
+  } while (day.isBefore(end));
+  return days;
+}
+
+/// The local days that have at least one event in [currentEvents], counting
+/// every day a sleep carries on into.
 Set<DateTime> daysWithEvents(List<BabyEvent> currentEvents) {
-  return {for (final event in currentEvents) _localDay(event.timestamp)};
+  // `...` spreads a list into the set, like AddRange in C#.
+  return {for (final event in currentEvents) ...daysOf(event)};
 }
 
 DateTime _localDay(DateTime time) {

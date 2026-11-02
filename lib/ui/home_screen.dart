@@ -368,8 +368,19 @@ class _HomeScreenState extends State<HomeScreen> {
     return '$date, $clock';
   }
 
+  /// A log past midnight says how many days it covers, such as "sleep, 2 days".
+  String _listTitle(BabyEvent event) {
+    final dayCount = daysOf(event).length;
+    if (dayCount == 1) return _label(event);
+    return '${_label(event)}, $dayCount days';
+  }
+
+  /// A log past midnight shows its start and its end, each with its date.
   String _describe(BabyEvent event) {
-    final time = _formatTime(event.timestamp);
+    var time = _formatTime(event.timestamp);
+    if (daysOf(event).length > 1) {
+      time = '$time – ${_formatTime(eventEnd(event))}';
+    }
     final amount = event.amount;
     final unit = LogKind.of(event.type).measure?.unit;
     if (amount == null || unit == null) return time;
@@ -517,7 +528,7 @@ class _HomeScreenState extends State<HomeScreen> {
       itemBuilder: (context, index) {
         final event = events[index];
         return ListTile(
-          title: Text(_label(event)),
+          title: Text(_listTitle(event)),
           subtitle: Text(_describe(event)),
           onTap: () => _edit(event),
           trailing: IconButton(
