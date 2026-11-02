@@ -27,6 +27,11 @@ void main() {
     expect(LogKind.sleep.measure!.title, 'Duration (min)');
   });
 
+  test('only a sleep measures minutes', () {
+    expect(LogKind.sleep.measure!.isMinutes, isTrue);
+    expect(LogKind.feed.measure!.isMinutes, isFalse);
+  });
+
   test('a diaper records no number', () {
     expect(LogKind.diaper.measure, isNull);
   });

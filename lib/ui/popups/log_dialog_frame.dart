@@ -9,10 +9,15 @@ class LogDialogFrame extends StatefulWidget {
     required this.title,
     required this.initialTime,
     required this.onSave,
+    this.onTimeChanged,
     this.timeLabel,
     this.warning,
     this.children = const [],
   });
+
+  /// Called when a new time is picked, for a popup whose controls depend on
+  /// it. Optional, so popups that don't care leave it out.
+  final ValueChanged<DateTime>? onTimeChanged;
 
   final String title;
   final DateTime initialTime;
@@ -51,6 +56,8 @@ class _LogDialogFrameState extends State<LogDialogFrame> {
           picked.minute,
         );
       });
+      // ?. calls it only if it was given, like C#'s ?.Invoke().
+      widget.onTimeChanged?.call(_time);
     }
   }
 

@@ -2,10 +2,18 @@ import 'baby_event.dart';
 
 /// The number a kind of log records. It's stored in [BabyEvent.amount].
 class Measure {
-  const Measure({required this.label, required this.unit});
+  const Measure({
+    required this.label,
+    required this.unit,
+    this.isMinutes = false,
+  });
 
   final String label;
   final String unit;
+
+  /// True if the number is how many minutes the log lasts, so the log ends
+  /// after its timestamp and can carry on into the next day.
+  final bool isMinutes;
 
   /// How the field and sheet column are titled, such as "Amount (ml)".
   String get title => '$label ($unit)';
@@ -36,7 +44,7 @@ enum LogKind {
     title: 'Sleep',
     emptyText: 'No sleep yet',
     timeLabel: 'Start',
-    measure: Measure(label: 'Duration', unit: 'min'),
+    measure: Measure(label: 'Duration', unit: 'min', isMinutes: true),
   );
 
   const LogKind({

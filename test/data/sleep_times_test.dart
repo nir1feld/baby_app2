@@ -31,4 +31,20 @@ void main() {
 
     expect(sleepMinutes(start, hour: 13, minute: 45), 30);
   });
+
+  group('sleepPassesMidnight', () {
+    final start = DateTime(2026, 10, 30, 22);
+
+    test('is true for a sleep that ends the next morning', () {
+      expect(sleepPassesMidnight(start, 480), isTrue);
+    });
+
+    test('is false for a sleep that ends before midnight', () {
+      expect(sleepPassesMidnight(start, 60), isFalse);
+    });
+
+    test('is false for a sleep that ends exactly at midnight', () {
+      expect(sleepPassesMidnight(start, 120), isFalse);
+    });
+  });
 }
